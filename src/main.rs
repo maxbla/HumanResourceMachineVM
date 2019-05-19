@@ -126,7 +126,7 @@ impl Add for OfficeTile {
                         eprintln!("Tried to ADD {} from {}, got {}", other_num, num, res);
                         panic!("Overflow: All numbers must be in range -999..=999");
                     }
-                    return OfficeTile::Number(res);
+                    OfficeTile::Number(res)
                 }
                 OfficeTile::Character(_) => panic!("Can't ADD between letter and number"),
             },
@@ -140,7 +140,7 @@ impl Add for OfficeTile {
                         );
                         panic!("Overflow: All numbers must be in range -999..=999");
                     }
-                    return OfficeTile::Number(res);
+                    OfficeTile::Number(res)
                 }
                 OfficeTile::Number(_) => panic!("Can't ADD between letter and number"),
             },
@@ -160,7 +160,7 @@ impl Sub for OfficeTile {
                         eprintln!("Tried to SUB {} from {}, got {}", other_num, num, res);
                         panic!("Underflow: All numbers must be in range -999..=999");
                     }
-                    return OfficeTile::Number(res);
+                    OfficeTile::Number(res)
                 }
                 OfficeTile::Character(_) => panic!("Can't SUB between letter and number"),
             },
@@ -174,7 +174,7 @@ impl Sub for OfficeTile {
                         );
                         panic!("Underflow: All numbers must be in range -999..=999");
                     }
-                    return OfficeTile::Number(res);
+                    OfficeTile::Number(res)
                 }
                 OfficeTile::Number(_) => panic!("Can't SUB between letter and number"),
             },
@@ -203,9 +203,9 @@ impl OfficeState {
     ) -> OfficeState {
         OfficeState {
             held: None,
-            inbox: inbox,
+            inbox,
             outbox: vec![].into_iter().collect(),
-            floor: floor,
+            floor,
         }
     }
 }
@@ -239,8 +239,8 @@ impl fmt::Display for OfficeState {
         }
         writeln!(f, "in {} out", s)?;
         for row in 0..rows {
-            let inbox_val = inbox.get(row).map_or("".to_string(), |t| t.to_string());
-            let outbox_val = outbox.get(row).map_or("".to_string(), |t| t.to_string());
+            let inbox_val = inbox.get(row).map_or("".to_string(), ToString::to_string);
+            let outbox_val = outbox.get(row).map_or("".to_string(), ToString::to_string);
             let mut s = String::with_capacity(2 * floor_width + 1);
             s.push(' ');
             for index in row * floor_width..(row + 1) * floor_width {
@@ -368,7 +368,7 @@ fn tokenize_hrm(file: File) -> std::io::Result<(Vec<TokenDebug>)> {
         line_number += 1;
         let tokens = line.split_whitespace();
         for token in tokens {
-            let new_token: Token = match token.as_ref() {
+            let new_token: Token = match token {
                 "INBOX" => Token::Op(Op::Inbox),
                 "OUTBOX" => Token::Op(Op::Outbox),
                 "COPYFROM" => Token::Op(Op::CopyFrom),
@@ -383,12 +383,12 @@ fn tokenize_hrm(file: File) -> std::io::Result<(Vec<TokenDebug>)> {
                 "COMMENT" => Token::Op(Op::Comment),
                 "DEFINE" => Token::Op(Op::Define),
                 "LABEL" => Token::Op(Op::Label),
-                define if define.ends_with(";") => {
+                define if define.ends_with(';') => {
                     /* serialized svg comment, can safely be ignored*/
                     println!("defined comment as {}", define);
                     Token::Op(Op::Svg(String::from(define)))
                 }
-                label if label.ends_with(":") => {
+                label if label.ends_with(':') => {
                     if label.len() == 1 {
                         //invalid - the empty label is not a label
                         panic!("invalid label at line {}", line_number);
@@ -397,7 +397,7 @@ fn tokenize_hrm(file: File) -> std::io::Result<(Vec<TokenDebug>)> {
                     Token::Op(Op::LabelDef(label_name))
                     //Token::Label(Label { name: label_name })
                 }
-                address if address.starts_with("[") && address.ends_with("]") => {
+                address if address.starts_with('[') && address.ends_with(']') => {
                     let address = address.split(|c| c == '[' || c == ']').nth(1).unwrap();
                     let address = address.parse::<usize>().unwrap();
                     Token::Address(Address::AddressOf(address))
@@ -412,9 +412,7 @@ fn tokenize_hrm(file: File) -> std::io::Result<(Vec<TokenDebug>)> {
             };
             tokens_vec.push(TokenDebug {
                 token: new_token,
-                debug_info: DebugInfo {
-                    line_number: line_number,
-                },
+                debug_info: DebugInfo { line_number },
             })
         }
         line.clear();
@@ -423,31 +421,33 @@ fn tokenize_hrm(file: File) -> std::io::Result<(Vec<TokenDebug>)> {
 }
 
 fn tokens_to_instructions(tokens: Vec<TokenDebug>) -> Vec<Instruction> {
-    let mut instructions = Vec::new();
+    let mut instrs = Vec::new();
     let mut tokens = tokens.into_iter().peekable();
     while let Some(token) = tokens.next() {
         let debg = token.debug_info;
         let token = token.token;
+
         match token {
             Token::Op(op) => match op {
-                Op::Inbox => instructions.push(Instruction::Inbox),
-                Op::Outbox => instructions.push(Instruction::Outbox),
-                Op::Comment => instructions.push(Instruction::Comment),
-                Op::Define => instructions.push(Instruction::Define),
+                Op::Inbox => instrs.push(Instruction::Inbox),
+                Op::Outbox => instrs.push(Instruction::Outbox),
+                Op::Comment => instrs.push(Instruction::Comment),
+                Op::Define => instrs.push(Instruction::Define),
                 Op::CopyFrom | Op::CopyTo | Op::BumpUp | Op::BumpDown | Op::Add | Op::Sub => {
                     let next = &tokens.next().expect("op requires address argument");
                     let next = &next.token;
-                    match next {
-                        Token::Address(addr) => match op {
-                            Op::CopyFrom => instructions.push(Instruction::CopyFrom(addr.clone())),
-                            Op::CopyTo => instructions.push(Instruction::CopyTo(addr.clone())),
-                            Op::BumpUp => instructions.push(Instruction::BumpUp(addr.clone())),
-                            Op::BumpDown => instructions.push(Instruction::BumpDown(addr.clone())),
-                            Op::Add => instructions.push(Instruction::Add(addr.clone())),
-                            Op::Sub => instructions.push(Instruction::Sub(addr.clone())),
+                    if let Token::Address(addr) = next {
+                        match op {
+                            Op::CopyFrom => instrs.push(Instruction::CopyFrom(*addr)),
+                            Op::CopyTo => instrs.push(Instruction::CopyTo(*addr)),
+                            Op::BumpUp => instrs.push(Instruction::BumpUp(*addr)),
+                            Op::BumpDown => instrs.push(Instruction::BumpDown(*addr)),
+                            Op::Add => instrs.push(Instruction::Add(*addr)),
+                            Op::Sub => instrs.push(Instruction::Sub(*addr)),
                             _ => panic!("Interpreter error, case not covered"),
-                        },
-                        _ => panic!(format!("Expected address, found {:?}", next)),
+                        }
+                    } else {
+                        panic!(format!("Expected address, found {:?}", next))
                     }
                 }
                 Op::Jump | Op::JumpN | Op::JumpZ => {
@@ -455,44 +455,44 @@ fn tokens_to_instructions(tokens: Vec<TokenDebug>) -> Vec<Instruction> {
                     let next = &next.token;
                     match next {
                         Token::Label(label) => match op {
-                            Op::Jump => instructions.push(Instruction::Jump(label.clone())),
-                            Op::JumpN => instructions.push(Instruction::JumpN(label.clone())),
-                            Op::JumpZ => instructions.push(Instruction::JumpZ(label.clone())),
+                            Op::Jump => instrs.push(Instruction::Jump(label.clone())),
+                            Op::JumpN => instrs.push(Instruction::JumpN(label.clone())),
+                            Op::JumpZ => instrs.push(Instruction::JumpZ(label.clone())),
                             _ => panic!("Interpreter error, case not covered"),
                         },
                         _ => panic!(format!("Expected address, found {:?}", next)),
                     }
 
                 }
-                Op::LabelDef(label) => instructions.push(Instruction::LabelDef(label)),
+                Op::LabelDef(label) => instrs.push(Instruction::LabelDef(label)),
                 Op::Label => {}
                 Op::Svg(_svg) => {}
             },
-            Token::Address(_address) => panic!("Address requires op taking address"),
+            Token::Address(_address) => {
+                eprintln!("{:?}", debg);
+                panic!("Address requires op taking address")
+            }
             Token::Label(_label) => {
                 eprintln!("{:?}", debg);
                 panic!("Label requires op taking label")
             }
         }
     }
-    instructions
+    instrs
 }
 
 /// Return hashmap of token indicies associated with labels
-fn process_labels(instructions: &Vec<Instruction>) -> HashMap<String, usize> {
+fn process_labels(instructions: &[Instruction]) -> HashMap<String, usize> {
     let mut label_map: HashMap<String, usize> = HashMap::new();
     for (instr_ptr, instruction) in instructions.iter().enumerate() {
-        match instruction {
-            Instruction::LabelDef(name) => {
-                label_map.insert(name.clone(), instr_ptr);
-            }
-            _ => {}
+        if let Instruction::LabelDef(name) = instruction {
+            label_map.insert(name.clone(), instr_ptr);
         }
     }
     label_map
 }
 
-fn interpret(instructions: &Vec<Instruction>, state: &mut OfficeState) {
+fn interpret(instructions: &[Instruction], state: &mut OfficeState) {
     let jmp_map = process_labels(&instructions);
     let mut instr_ptr = 0_usize;
     println!("{}", state);
@@ -516,16 +516,14 @@ fn calc_jump(
 ) -> Option<usize> {
     match instruction {
         Instruction::Jump(label) => {
-            let name = &label.name;
-            let line = jmp_map[&name[..]];
+            let line = jmp_map[&label.name];
             return Some(line);
         }
         Instruction::JumpN(label) => {
             let held_val = held.expect("Cannot JUMPN with empty hands");
             if let OfficeTile::Number(num) = held_val {
                 if num < 0 {
-                    let name = &label.name;
-                    let line = jmp_map[&name[..]];
+                    let line = jmp_map[&label.name];
                     return Some(line);
                 }
             }
@@ -534,15 +532,14 @@ fn calc_jump(
             let held_val = held.expect("Cannot JUMPZ with empty hands");
             if let OfficeTile::Number(num) = held_val {
                 if num == 0 {
-                    let name = &label.name;
-                    let line = jmp_map[&name[..]];
+                    let line = jmp_map[&label.name];
                     return Some(line);
                 }
             }
         }
         _ => {}
     }
-    return None;
+    None
 }
 
 fn main() -> std::io::Result<()> {
@@ -551,9 +548,7 @@ fn main() -> std::io::Result<()> {
     //println!("{:?}", tokens);
     let instructions = tokens_to_instructions(tokens);
     println!("{:?}", instructions);
-    let label_map = process_labels(&instructions);
 
-    //println!("{:?}", label_map);
     let inbox: VecDeque<OfficeTile> = vec![
         OfficeTile::from_char('b'),
         OfficeTile::from_char('r'),
