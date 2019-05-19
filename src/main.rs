@@ -94,7 +94,6 @@ enum OfficeTile {
     Character(char), //chars in human resource machine appear to be all [a-zA-Z]
 }
 
-
 impl OfficeTile {
     fn from_char(c: char) -> OfficeTile {
         OfficeTile::Character(c)
@@ -462,7 +461,6 @@ fn tokens_to_instructions(tokens: Vec<TokenDebug>) -> Vec<Instruction> {
                         },
                         _ => panic!(format!("Expected address, found {:?}", next)),
                     }
-
                 }
                 Op::LabelDef(label) => instrs.push(Instruction::LabelDef(label)),
                 Op::Label => {}
