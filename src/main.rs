@@ -192,10 +192,6 @@ struct OfficeState {
 }
 
 impl OfficeState {
-    fn new() -> OfficeState {
-        OfficeState::new_with_inbox_floor(vec![].into_iter().collect(), vec![])
-    }
-
     pub fn new_with_inbox_floor(
         inbox: VecDeque<OfficeTile>,
         floor: Vec<Option<OfficeTile>>,
@@ -282,66 +278,101 @@ impl Addressable for Address {
 }
 
 trait Executable {
-    fn execute(&self, state: &mut OfficeState);
+    fn execute(&self, state: &mut OfficeState) -> Result<bool, &'static str>;
 }
 
 impl Executable for Instruction {
-    fn execute(&self, state: &mut OfficeState) {
-        let held = &state.held;
+    fn execute(&self, state: &mut OfficeState) -> Result<bool, &'static str> {
+        let held = state.held;
         let floor = &state.floor;
         match self {
             Instruction::Add(addr) => {
                 let addr = addr.get_value(state);
-                let other = floor[addr].expect("Cannot ADD to empty tile");
-                state.held = Some(held.expect("Cannot ADD with empty hands") + other);
+                match floor[addr] {
+                    Some(val) => match held {
+                        Some(held) => state.held = Some(held + val),
+                        None => return Err("Cannot ADD with empty hands"),
+                    },
+                    None => return Err("Cannot ADD to empty tile"),
+                }
+                Ok(false)
             }
             Instruction::Sub(addr) => {
                 let addr = addr.get_value(state);
-                let other = floor[addr].expect("Cannot SUB from empty tile");
-                state.held = Some(held.expect("Cannot SUB with empty hands") - other);
+                match floor[addr] {
+                    Some(val) => match held {
+                        Some(held) => state.held = Some(held - val),
+                        None => return Err("Cannot SUB with empty hands"),
+                    },
+                    None => return Err("Cannot SUB from empty tile"),
+                }
+                Ok(false)
             }
             Instruction::BumpUp(addr) => {
                 let addr = addr.get_value(state);
-                let other = floor[addr].expect("Cannot BUMP empty tile");
-                let res = other + OfficeTile::Number(1);
-                state.floor[addr] = Some(res);
-                state.held = Some(res);
+                match floor[addr] {
+                    Some(val) => {
+                        let res = Some(val + OfficeTile::Number(1));
+                        state.floor[addr] = res;
+                        state.held = res;
+                        Ok(false)
+                    }
+                    None => Err("Cannot BUMPUP empty tile"),
+                }
             }
             Instruction::BumpDown(addr) => {
                 let addr = addr.get_value(state);
-                let other = floor[addr].expect("Cannot BUMP empty tile");
-                let res = other - OfficeTile::Number(1);
-                state.floor[addr] = Some(res);
-                state.held = Some(res);
+                match floor[addr] {
+                    Some(val) => {
+                        let res = Some(val - OfficeTile::Number(1));
+                        state.floor[addr] = res;
+                        state.held = res;
+                        Ok(false)
+                    }
+                    None => Err("Cannot BUMPDN empty tile"),
+                }
             }
             Instruction::CopyFrom(addr) => {
                 let addr = addr.get_value(state);
-                let tile = floor[addr].expect("Cannot COPYFROM empty tile");
-                state.held = Some(tile)
+                match floor[addr] {
+                    Some(val) => {
+                        state.held = Some(val);
+                        Ok(false)
+                    }
+                    None => Err("Cannot COPYFROM empty tile"),
+                }
             }
-            Instruction::CopyTo(addr) => {
-                let held = held.expect("Cannot COPYTO with empty hands");
-                let addr = addr.get_value(state);
-                state.floor[addr] = Some(held);
-            }
-            Instruction::Inbox => {
-                //TODO: end gracefully here?
-                let val = state.inbox.pop_front().expect("Nothing left to INBOX");
-                println!("Fetching {:?} from inbox", val);
-                println!("Inbox:{:?}", state.inbox);
-                state.held = Some(val);
-            }
-            Instruction::Outbox => {
-                let held = held.expect("Cannot OUTBOX with empty hands");
-                state.outbox.push_front(held);
-                state.held = None;
-            }
-            Instruction::LabelDef(_)
-            | Instruction::Jump(_)
-            | Instruction::JumpN(_)
-            | Instruction::JumpZ(_) => {}
-            Instruction::Comment => {}
-            Instruction::Define => {}
+            Instruction::CopyTo(addr) => match held {
+                Some(val) => {
+                    let addr = addr.get_value(state);
+                    state.floor[addr] = Some(val);
+                    Ok(false)
+                }
+                None => Err("Cannot COPYTO with empty hands"),
+            },
+            Instruction::Inbox => match state.inbox.pop_front() {
+                Some(val) => {
+                    println!("Fetching {:?} from inbox", val);
+                    println!("Inbox:{:?}", state.inbox);
+                    state.held = Some(val);
+                    Ok(false)
+                }
+                None => Ok(true),
+            },
+            Instruction::Outbox => match held {
+                Some(val) => {
+                    state.outbox.push_front(val);
+                    state.held = None;
+                    Ok(false)
+                }
+                None => Err("Cannot OUTBOX with empty hands"),
+            },
+            Instruction::LabelDef(_) => Ok(false),
+            Instruction::Jump(_) => Ok(false),
+            Instruction::JumpN(_) => Ok(false),
+            Instruction::JumpZ(_) => Ok(false),
+            Instruction::Comment => Ok(false),
+            Instruction::Define => Ok(false),
         }
     }
 }
@@ -493,17 +524,20 @@ fn process_labels(instructions: &[Instruction]) -> HashMap<String, usize> {
 fn interpret(instructions: &[Instruction], state: &mut OfficeState) {
     let jmp_map = process_labels(&instructions);
     let mut instr_ptr = 0_usize;
-    println!("{}", state);
     while instr_ptr < instructions.len() {
+        println!("{}", state);
         let instruction = &instructions[instr_ptr];
         println!("Executing {:?}", instruction);
-        instruction.execute(state);
+        let finished = instruction.execute(state).unwrap();
+        if finished {
+            println!("Finished running program");
+            break;
+        }
         if let Some(index) = calc_jump(instruction, &jmp_map, state.held) {
             instr_ptr = index;
         } else {
             instr_ptr += 1;
         }
-        println!("{}", state);
     }
 }
 
