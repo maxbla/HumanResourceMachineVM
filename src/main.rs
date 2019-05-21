@@ -9,6 +9,7 @@ use std::ops::Sub;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 
+use std::convert::From;
 use std::fmt;
 
 /// An instruction without it argument
@@ -94,14 +95,49 @@ enum OfficeTile {
     Character(char), //chars in human resource machine appear to be all [a-zA-Z]
 }
 
-impl OfficeTile {
-    fn from_char(c: char) -> OfficeTile {
+impl From<char> for OfficeTile {
+    fn from(c: char) -> OfficeTile {
         OfficeTile::Character(c)
     }
+}
 
-    fn from_number(n: i16) -> OfficeTile {
+impl From<i16> for OfficeTile {
+    fn from(n: i16) -> OfficeTile {
         OfficeTile::Number(n)
     }
+}
+
+macro_rules! create_inbox {
+    ( $( $x:expr ),* ) => {
+        {
+            let mut inbox = VecDeque::new();
+            $(
+                inbox.push_back(OfficeTile::from($x));
+            )*
+            inbox
+        }
+    }
+}
+
+macro_rules! create_floor {
+    ( $len:expr, $( $index:expr,  $tile:expr ),* ) => {
+        {
+            let mut floor = Vec::with_capacity($len);
+            for _ in 0..$len {
+                floor.push(None)
+            }
+            $(
+                floor[$index] = Some(tile!($tile));
+            )*
+            floor
+        }
+    }
+}
+
+macro_rules! tile {
+    ( $value:expr ) => {{
+        OfficeTile::from($value)
+    }};
 }
 
 impl fmt::Display for OfficeTile {
@@ -581,22 +617,8 @@ fn main() -> std::io::Result<()> {
     let instructions = tokens_to_instructions(tokens);
     println!("{:?}", instructions);
 
-    let inbox: VecDeque<OfficeTile> = vec![
-        OfficeTile::from_char('b'),
-        OfficeTile::from_char('r'),
-        OfficeTile::from_char('a'),
-        OfficeTile::from_char('i'),
-        OfficeTile::from_char('n'),
-        OfficeTile::from_number(0),
-    ]
-    .into_iter()
-    .collect();
-    let floor_size = 15;
-    let mut floor = Vec::with_capacity(floor_size);
-    for _ in 0..floor_size {
-        floor.push(None);
-    }
-    floor[14] = Some(OfficeTile::from_number(0));
+    let inbox = create_inbox!('b', 'r', 'a', 'i', 'n', 0);
+    let floor = create_floor!(15, 14, tile!(0));
 
     let mut office_state = OfficeState::new_with_inbox_floor(inbox, floor);
     interpret(&instructions, &mut office_state);
