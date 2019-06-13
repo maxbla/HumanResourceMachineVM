@@ -13,7 +13,7 @@ use std::convert::From;
 use std::fmt;
 
 /// An instruction without it argument
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 enum Op {
     Inbox,
     Outbox,
@@ -27,14 +27,11 @@ enum Op {
     BumpDown,
     Sub,
     Add,
-    Comment,
-    Define, //ignored, defines the shapes of drawings
-    Label,
-    Svg(String),
+    Define(Define), //ignored, defines the shapes of drawings
 }
 
 /// The smallest executable element
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 enum Instruction {
     Inbox,
     Outbox,
@@ -48,8 +45,13 @@ enum Instruction {
     BumpDown(Address),
     Sub(Address),
     Add(Address),
-    Comment,
-    Define, //ignored, defines the shapes of drawings
+    Define(Define), //ignored, defines the shapes of drawings
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Define {
+    Comment(usize, String),
+    Label(usize, String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,7 +61,7 @@ struct Label {
 }
 
 /// Space separated syntax element
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 enum Token {
     Op(Op),
     Address(Address),
@@ -89,7 +91,7 @@ struct DebugInfo {
 /// A value
 /// Can either be a character or a number (integer)
 /// OfficeTiles come in the inbox, are placed on the floor and go out the outbox
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum OfficeTile {
     Number(i16),     //numbers in human resource machine are in -999..=999
     Character(char), //chars in human resource machine appear to be all [a-zA-Z]
@@ -407,33 +409,30 @@ impl Executable for Instruction {
             Instruction::Jump(_) => Ok(false),
             Instruction::JumpN(_) => Ok(false),
             Instruction::JumpZ(_) => Ok(false),
-            Instruction::Comment => Ok(false),
-            Instruction::Define => Ok(false),
+            Instruction::Define(_) => Ok(false),
         }
     }
 }
 
 fn tokenize_hrm(file: File) -> std::io::Result<(Vec<TokenDebug>)> {
-    let mut reader = BufReader::new(file);
-    let mut line = String::new();
-    let mut line_number = 0;
+    let reader = BufReader::new(file);
+    let mut lines = reader.lines().enumerate();
     {
         //Ensure program starts with the proper header
-        let header = "-- HUMAN RESOURCE MACHINE PROGRAM --\n";
-        reader.read_line(&mut line)?;
-        line_number += 1;
+        let header = "-- HUMAN RESOURCE MACHINE PROGRAM --";
+        let (_line_number, line) = lines.next().expect("File has 0 lines");
+        let line = line?;
         if line != header {
-            eprintln!("Expected {} got {}", header, line);
+            eprintln!("File should start with \"{}\" got \"{}\"", header, line);
             panic!("File is not human resource machine file");
         }
-        line.clear();
     }
 
     let mut tokens_vec: Vec<TokenDebug> = Vec::new();
-    while reader.read_line(&mut line)? != 0 {
-        line_number += 1;
-        let tokens = line.split_whitespace();
-        for token in tokens {
+    while let Some((line_number, line)) = lines.next() {
+        let line = line?;
+        let mut tokens = line.split_whitespace();
+        while let Some(token) = tokens.next() {
             let new_token: Token = match token {
                 "INBOX" => Token::Op(Op::Inbox),
                 "OUTBOX" => Token::Op(Op::Outbox),
@@ -446,13 +445,33 @@ fn tokenize_hrm(file: File) -> std::io::Result<(Vec<TokenDebug>)> {
                 "BUMPDN" => Token::Op(Op::BumpDown),
                 "SUB" => Token::Op(Op::Sub),
                 "ADD" => Token::Op(Op::Add),
-                "COMMENT" => Token::Op(Op::Comment),
-                "DEFINE" => Token::Op(Op::Define),
-                "LABEL" => Token::Op(Op::Label),
-                define if define.ends_with(';') => {
-                    /* serialized svg comment, can safely be ignored*/
-                    println!("defined comment as {}", define);
-                    Token::Op(Op::Svg(String::from(define)))
+                "DEFINE" => {
+                    let token = tokens.next();
+                    let num = tokens.next().expect("Comment has no number");
+                    let num = num
+                        .parse::<usize>()
+                        .expect("COMMENT must be followed by a number");
+                    let mut svg = String::new();
+                    while let Some((_line_number, line)) = lines.next() {
+                        let line = line?;
+                        if line.ends_with(";") {
+                            svg.push_str(&line[..line.len() - 1]); //exclude trailing semicolon
+                            break;
+                        }
+                        svg.push_str(&line[..]);
+                    }
+                    match token {
+                        Some("COMMENT") => Token::Op(Op::Define(Define::Comment(num, svg))),
+                        Some("LABEL") => Token::Op(Op::Define(Define::Label(num, svg))),
+                        Some(other) => {
+                            eprintln!("Expected COMMENT or LABEL after DEFINE, got {}", other);
+                            panic!("Tokenization Error")
+                        }
+                        None => {
+                            eprintln!("Expected COMMENT or LABEL after DEFINE,");
+                            panic!("Tokenization Error")
+                        }
+                    }
                 }
                 label if label.ends_with(':') => {
                     if label.len() == 1 {
@@ -481,14 +500,13 @@ fn tokenize_hrm(file: File) -> std::io::Result<(Vec<TokenDebug>)> {
                 debug_info: DebugInfo { line_number },
             })
         }
-        line.clear();
     }
     Ok(tokens_vec)
 }
 
 fn tokens_to_instructions(tokens: Vec<TokenDebug>) -> Vec<Instruction> {
     let mut instrs = Vec::new();
-    let mut tokens = tokens.into_iter().peekable();
+    let mut tokens = tokens.into_iter();
     while let Some(token) = tokens.next() {
         let debg = token.debug_info;
         let token = token.token;
@@ -497,8 +515,7 @@ fn tokens_to_instructions(tokens: Vec<TokenDebug>) -> Vec<Instruction> {
             Token::Op(op) => match op {
                 Op::Inbox => instrs.push(Instruction::Inbox),
                 Op::Outbox => instrs.push(Instruction::Outbox),
-                Op::Comment => instrs.push(Instruction::Comment),
-                Op::Define => instrs.push(Instruction::Define),
+                Op::Define(def) => instrs.push(Instruction::Define(def)),
                 Op::CopyFrom | Op::CopyTo | Op::BumpUp | Op::BumpDown | Op::Add | Op::Sub => {
                     let next = &tokens.next().expect("op requires address argument");
                     let next = &next.token;
@@ -530,8 +547,6 @@ fn tokens_to_instructions(tokens: Vec<TokenDebug>) -> Vec<Instruction> {
                     }
                 }
                 Op::LabelDef(label) => instrs.push(Instruction::LabelDef(label)),
-                Op::Label => {}
-                Op::Svg(_svg) => {}
             },
             Token::Address(_address) => {
                 eprintln!("{:?}", debg);
