@@ -625,6 +625,37 @@ fn calc_jump(
     None
 }
 
+#[cfg(test)]
+mod tests {
+    use crate::interpret;
+    use crate::tokenize_hrm;
+    use crate::tokens_to_instructions;
+    use crate::OfficeState;
+    use crate::OfficeTile;
+    use std::collections::VecDeque;
+    use std::fs::File;
+    #[test]
+    fn test_reverse_string() {
+        let file = File::open("example.hrm").unwrap();
+        let tokens = tokenize_hrm(file).unwrap();
+        println!("{:?}", tokens);
+        let instructions = tokens_to_instructions(tokens);
+        let inbox = create_inbox!(
+            'b', 'r', 'a', 'i', 'n', 0, 'x', 'y', 0, 'a', 'b', 's', 'e', 'n', 't', 'm', 'i', 'n',
+            'd', 'e', 'd', 0
+        );
+        let floor = create_floor!(15, 14, tile!(0));
+        let mut office_state = OfficeState::new_with_inbox_floor(inbox, floor);
+        interpret(&instructions, &mut office_state);
+
+        let expected_output = create_inbox!(
+            'a', 'b', 's', 'e', 'n', 't', 'm', 'i', 'n', 'd', 'e', 'd', 'x', 'y', 'b', 'r', 'a',
+            'i', 'n'
+        );
+        assert_eq!(expected_output, office_state.outbox);
+    }
+}
+
 fn main() -> std::io::Result<()> {
     let file = File::open("example.hrm")?;
     let tokens = tokenize_hrm(file)?;
