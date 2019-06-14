@@ -625,6 +625,13 @@ fn calc_jump(
     None
 }
 
+fn run(file: File, mut state: OfficeState) -> std::io::Result<()> {
+    let tokens = tokenize_hrm(file)?;
+    let instructions = tokens_to_instructions(tokens);
+    interpret(&instructions, &mut state);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use crate::interpret;
@@ -658,16 +665,11 @@ mod tests {
 
 fn main() -> std::io::Result<()> {
     let file = File::open("example.hrm")?;
-    let tokens = tokenize_hrm(file)?;
-    //println!("{:?}", tokens);
-    let instructions = tokens_to_instructions(tokens);
-    println!("{:?}", instructions);
-
     let inbox = create_inbox!('b', 'r', 'a', 'i', 'n', 0);
     let floor = create_floor!(15, 14, tile!(0));
 
-    let mut office_state = OfficeState::new_with_inbox_floor(inbox, floor);
-    interpret(&instructions, &mut office_state);
+    let office_state = OfficeState::new_with_inbox_floor(inbox, floor);
+    run(file, office_state)?;
     //println!("{}", office_state);
     Ok(())
 }
