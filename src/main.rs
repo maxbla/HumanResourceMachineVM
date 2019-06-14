@@ -480,7 +480,6 @@ fn tokenize_hrm(file: File) -> std::io::Result<(Vec<TokenDebug>)> {
                     }
                     let label_name = String::from(label.split_at(label.len() - 1).0);
                     Token::Op(Op::LabelDef(label_name))
-                    //Token::Label(Label { name: label_name })
                 }
                 address if address.starts_with('[') && address.ends_with(']') => {
                     let address = address.split(|c| c == '[' || c == ']').nth(1).unwrap();
@@ -670,6 +669,5 @@ fn main() -> std::io::Result<()> {
 
     let office_state = OfficeState::new_with_inbox_floor(inbox, floor);
     run(file, office_state)?;
-    //println!("{}", office_state);
     Ok(())
 }
