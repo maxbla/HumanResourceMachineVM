@@ -1,10 +1,8 @@
+use std::error;
 use std::fs::File;
 
 use std::io::BufRead;
 use std::io::BufReader;
-
-use std::ops::Add;
-use std::ops::Sub;
 
 use std::collections::HashMap;
 use std::collections::VecDeque;
@@ -13,7 +11,7 @@ use std::convert::From;
 use std::fmt;
 
 /// An instruction without it argument
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 enum Op {
     Inbox,
     Outbox,
@@ -31,7 +29,7 @@ enum Op {
 }
 
 /// The smallest executable element
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Instruction {
     Inbox,
     Outbox,
@@ -48,20 +46,58 @@ enum Instruction {
     Define(Define), //ignored, defines the shapes of drawings
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone)]
+struct InstructionDebug(Instruction, DebugInfo);
+
+impl fmt::Display for Instruction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Instruction::Inbox => write!(f, "Inbox"),
+            Instruction::Outbox => write!(f, "Outbox"),
+            Instruction::CopyFrom(addr) => write!(f, "CopyFrom:{}", addr),
+            Instruction::CopyTo(addr) => write!(f, "CopyTo:{}", addr),
+            Instruction::Jump(label) => write!(f, "Jump:{}", label),
+            Instruction::JumpZ(label) => write!(f, "JumpZ:{}", label),
+            Instruction::JumpN(label) => write!(f, "JumpN:{}", label),
+            Instruction::LabelDef(name) => write!(f, "LabelDef:{}", name),
+            Instruction::BumpUp(addr) => write!(f, "BumpUp:{}", addr),
+            Instruction::BumpDown(addr) => write!(f, "BumpDown:{}", addr),
+            Instruction::Sub(addr) => write!(f, "Sub:{}", addr),
+            Instruction::Add(addr) => write!(f, "Add:{}", addr),
+            Instruction::Define(addr) => write!(f, "Define:{}", addr),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 enum Define {
     Comment(usize, String),
     Label(usize, String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+impl fmt::Display for Define {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Define::Comment(num, comment) => write!(f, "Comment[{}]:{}", num, comment),
+            Define::Label(num, label) => write!(f, "Label[{}]:{}", num, label),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 /// label as argument, not definition of a label
 struct Label {
     name: String,
 }
 
+impl fmt::Display for Label {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Label:{}", self.name)
+    }
+}
+
 /// Space separated syntax element
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 enum Token {
     Op(Op),
     Address(Address),
@@ -69,10 +105,19 @@ enum Token {
 }
 
 /// Token that refers to an office tile on the floor
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone)]
 enum Address {
     Address(usize),
     AddressOf(usize),
+}
+
+impl fmt::Display for Address {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Address::AddressOf(tile) => write!(f, "[{}]", tile),
+            Address::Address(tile) => write!(f, "{}", tile),
+        }
+    }
 }
 
 /// A token with some extra debug info
@@ -83,9 +128,9 @@ struct TokenDebug {
 }
 
 /// The debug info of a token e.g. the line it occured in the original source
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct DebugInfo {
-    line_number: usize,
+    line: usize,
 }
 
 /// A value
@@ -151,74 +196,65 @@ impl fmt::Display for OfficeTile {
     }
 }
 
-impl Add for OfficeTile {
-    type Output = OfficeTile;
-
-    fn add(self, other: OfficeTile) -> OfficeTile {
+impl OfficeTile {
+    fn checked_add(self, rhs: OfficeTile) -> Result<OfficeTile, ArithmeticError> {
         match self {
-            OfficeTile::Number(num) => match other {
-                OfficeTile::Number(other_num) => {
-                    let res = num + other_num;
-                    if res > 999_i16 {
-                        eprintln!("Tried to ADD {} from {}, got {}", other_num, num, res);
-                        panic!("Overflow: All numbers must be in range -999..=999");
+            OfficeTile::Number(num) => match rhs {
+                OfficeTile::Number(rhs_num) => match num.checked_add(rhs_num) {
+                    Some(res) => {
+                        if res > 999_i16 {
+                            return Err(ArithmeticError::OverflowError);
+                        }
+                        Ok(OfficeTile::Number(res))
                     }
-                    OfficeTile::Number(res)
-                }
-                OfficeTile::Character(_) => panic!("Can't ADD between letter and number"),
+                    None => Err(ArithmeticError::OverflowError),
+                },
+                OfficeTile::Character(_) => Err(ArithmeticError::TypeError),
             },
-            OfficeTile::Character(character) => match other {
-                OfficeTile::Character(other_char) => {
-                    let res: i16 = character as i16 + other_char as i16;
-                    if res > 999_i16 {
-                        eprintln!(
-                            "Tried to ADD {} from {}, got {}",
-                            other_char, character, res
-                        );
-                        panic!("Overflow: All numbers must be in range -999..=999");
+            OfficeTile::Character(character) => match rhs {
+                OfficeTile::Character(rhs_char) => {
+                    match (character as i16).checked_add(rhs_char as i16) {
+                        Some(res) => {
+                            if res > 999_i16 {
+                                return Err(ArithmeticError::OverflowError);
+                            }
+                            Ok(OfficeTile::Number(res))
+                        }
+                        None => Err(ArithmeticError::OverflowError),
                     }
-                    OfficeTile::Number(res)
                 }
-                OfficeTile::Number(_) => panic!("Can't ADD between letter and number"),
+                OfficeTile::Number(_) => Err(ArithmeticError::TypeError),
             },
         }
     }
-}
 
-impl Sub for OfficeTile {
-    type Output = OfficeTile;
-
-    fn sub(self, other: OfficeTile) -> OfficeTile {
+    fn checked_sub(self, rhs: OfficeTile) -> Result<OfficeTile, ArithmeticError> {
         match self {
-            OfficeTile::Number(num) => match other {
+            OfficeTile::Number(num) => match rhs {
                 OfficeTile::Number(other_num) => {
                     let res = num - other_num;
                     if res < -999_i16 {
-                        eprintln!("Tried to SUB {} from {}, got {}", other_num, num, res);
-                        panic!("Underflow: All numbers must be in range -999..=999");
+                        return Err(ArithmeticError::OverflowError);
                     }
-                    OfficeTile::Number(res)
+                    Ok(OfficeTile::Number(res))
                 }
-                OfficeTile::Character(_) => panic!("Can't SUB between letter and number"),
+                OfficeTile::Character(_) => Err(ArithmeticError::TypeError),
             },
-            OfficeTile::Character(character) => match other {
+            OfficeTile::Character(character) => match rhs {
                 OfficeTile::Character(other_char) => {
                     let res: i16 = character as i16 - other_char as i16;
                     if res < -999_i16 {
-                        eprintln!(
-                            "Tried to SUB {} from {}, got {}",
-                            other_char, character, res
-                        );
-                        panic!("Underflow: All numbers must be in range -999..=999");
+                        return Err(ArithmeticError::OverflowError);
                     }
-                    OfficeTile::Number(res)
+                    Ok(OfficeTile::Number(res))
                 }
-                OfficeTile::Number(_) => panic!("Can't SUB between letter and number"),
+                OfficeTile::Number(_) => Err(ArithmeticError::TypeError),
             },
         }
     }
 }
 
+// TODO: add instruction pointer here
 /// The state of the entire office
 /// Composed of the tile held by the player, the inbox, outbox and floor
 #[derive(Debug)]
@@ -315,59 +351,123 @@ impl Addressable for Address {
     }
 }
 
+enum RuntimeError {
+    EmptyHandsError(DebugInfo, Instruction),
+    EmptyTileError(DebugInfo, Instruction),
+    OverflowError(DebugInfo, Instruction),
+    TypeError(DebugInfo, Instruction),
+}
+
+enum ArithmeticError {
+    OverflowError,
+    TypeError,
+}
+
+impl fmt::Debug for RuntimeError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            RuntimeError::EmptyHandsError(info, instr) => {
+                writeln!(f, "Can't do {} - your hands are empty!", instr)?;
+                writeln!(f, "line: {}", info.line)
+            }
+            RuntimeError::EmptyTileError(info, instr) => {
+                writeln!(f, "Can't {} - the tile is empty!", instr)?;
+                writeln!(f, "line: {}", info.line)
+            }
+            RuntimeError::OverflowError(info, instr) => {
+                writeln!(f, "Operation: {} overflowed", instr)?;
+                writeln!(f, "line: {}", info.line)
+            }
+            RuntimeError::TypeError(info, instr) => {
+                writeln!(f, "can't {} - Incompatible types", instr)?;
+                writeln!(f, "line: {}", info.line)
+            }
+        }
+    }
+}
+
 trait Executable {
-    fn execute(&self, state: &mut OfficeState) -> Result<bool, &'static str>;
+    fn execute(&self, state: &mut OfficeState, debug: &DebugInfo) -> Result<bool, RuntimeError>;
+}
+
+fn arithmetic_to_runtime_error(
+    val: Result<OfficeTile, ArithmeticError>,
+    instr: &Instruction,
+    debug: DebugInfo,
+) -> Result<OfficeTile, RuntimeError> {
+    match val {
+        Ok(num) => Ok(num),
+        Err(err) => match err {
+            ArithmeticError::OverflowError => {
+                return Err(RuntimeError::OverflowError(debug, instr.clone()))
+            }
+            ArithmeticError::TypeError => {
+                return Err(RuntimeError::TypeError(debug, instr.clone()))
+            }
+        },
+    }
 }
 
 impl Executable for Instruction {
-    fn execute(&self, state: &mut OfficeState) -> Result<bool, &'static str> {
+    fn execute(&self, state: &mut OfficeState, debug: &DebugInfo) -> Result<bool, RuntimeError> {
         let held = state.held;
         let floor = &state.floor;
+        let debug = debug.clone();
         match self {
             Instruction::Add(addr) => {
                 let addr = addr.get_value(state);
                 match floor[addr] {
+                    None => return Err(RuntimeError::EmptyTileError(debug, self.clone())),
                     Some(val) => match held {
-                        Some(held) => state.held = Some(held + val),
-                        None => return Err("Cannot ADD with empty hands"),
+                        None => return Err(RuntimeError::EmptyHandsError(debug, self.clone())),
+                        Some(held) => {
+                            let res =
+                                arithmetic_to_runtime_error(held.checked_add(val), self, debug)?;
+                            state.held = Some(res);
+                            return Ok(false);
+                        }
                     },
-                    None => return Err("Cannot ADD to empty tile"),
                 }
-                Ok(false)
             }
             Instruction::Sub(addr) => {
                 let addr = addr.get_value(state);
                 match floor[addr] {
+                    None => return Err(RuntimeError::EmptyTileError(debug, self.clone())),
                     Some(val) => match held {
-                        Some(held) => state.held = Some(held - val),
-                        None => return Err("Cannot SUB with empty hands"),
+                        None => return Err(RuntimeError::EmptyHandsError(debug, self.clone())),
+                        Some(held) => {
+                            let res =
+                                arithmetic_to_runtime_error(held.checked_sub(val), self, debug)?;
+                            state.held = Some(res);
+                            return Ok(false);
+                        }
                     },
-                    None => return Err("Cannot SUB from empty tile"),
                 }
-                Ok(false)
             }
             Instruction::BumpUp(addr) => {
                 let addr = addr.get_value(state);
                 match floor[addr] {
                     Some(val) => {
-                        let res = Some(val + OfficeTile::Number(1));
-                        state.floor[addr] = res;
-                        state.held = res;
-                        Ok(false)
+                        let one = OfficeTile::Number(1);
+                        let res = arithmetic_to_runtime_error(val.checked_add(one), self, debug)?;
+                        state.floor[addr] = Some(res);
+                        state.held = Some(res);
+                        return Ok(false);
                     }
-                    None => Err("Cannot BUMPUP empty tile"),
+                    None => Err(RuntimeError::EmptyTileError(debug, self.clone())),
                 }
             }
             Instruction::BumpDown(addr) => {
                 let addr = addr.get_value(state);
                 match floor[addr] {
                     Some(val) => {
-                        let res = Some(val - OfficeTile::Number(1));
-                        state.floor[addr] = res;
-                        state.held = res;
+                        let one = OfficeTile::Number(1);
+                        let res = arithmetic_to_runtime_error(val.checked_add(one), self, debug)?;
+                        state.floor[addr] = Some(res);
+                        state.held = Some(res);
                         Ok(false)
                     }
-                    None => Err("Cannot BUMPDN empty tile"),
+                    None => Err(RuntimeError::EmptyTileError(debug, self.clone())),
                 }
             }
             Instruction::CopyFrom(addr) => {
@@ -377,7 +477,7 @@ impl Executable for Instruction {
                         state.held = Some(val);
                         Ok(false)
                     }
-                    None => Err("Cannot COPYFROM empty tile"),
+                    None => Err(RuntimeError::EmptyTileError(debug, self.clone())),
                 }
             }
             Instruction::CopyTo(addr) => match held {
@@ -386,7 +486,7 @@ impl Executable for Instruction {
                     state.floor[addr] = Some(val);
                     Ok(false)
                 }
-                None => Err("Cannot COPYTO with empty hands"),
+                None => Err(RuntimeError::EmptyHandsError(debug, self.clone())),
             },
             Instruction::Inbox => match state.inbox.pop_front() {
                 Some(val) => {
@@ -403,7 +503,7 @@ impl Executable for Instruction {
                     state.held = None;
                     Ok(false)
                 }
-                None => Err("Cannot OUTBOX with empty hands"),
+                None => Err(RuntimeError::EmptyHandsError(debug, self.clone())),
             },
             Instruction::LabelDef(_) => Ok(false),
             Instruction::Jump(_) => Ok(false),
@@ -447,10 +547,10 @@ fn tokenize_hrm(file: File) -> std::io::Result<(Vec<TokenDebug>)> {
                 "ADD" => Token::Op(Op::Add),
                 "DEFINE" => {
                     let token = tokens.next();
-                    let num = tokens.next().expect("Comment has no number");
+                    let num = tokens.next().expect("Define has no number");
                     let num = num
                         .parse::<usize>()
-                        .expect("COMMENT must be followed by a number");
+                        .expect("DEFINE must be followed by a number");
                     let mut svg = String::new();
                     while let Some((_line_number, line)) = lines.next() {
                         let line = line?;
@@ -478,7 +578,7 @@ fn tokenize_hrm(file: File) -> std::io::Result<(Vec<TokenDebug>)> {
                         //invalid - the empty label is not a label
                         panic!("invalid label at line {}", line_number);
                     }
-                    let label_name = String::from(label.split_at(label.len() - 1).0);
+                    let label_name = label[0..label.len() - 1].to_string();
                     Token::Op(Op::LabelDef(label_name))
                 }
                 address if address.starts_with('[') && address.ends_with(']') => {
@@ -496,36 +596,36 @@ fn tokenize_hrm(file: File) -> std::io::Result<(Vec<TokenDebug>)> {
             };
             tokens_vec.push(TokenDebug {
                 token: new_token,
-                debug_info: DebugInfo { line_number },
+                debug_info: DebugInfo { line: line_number },
             })
         }
     }
     Ok(tokens_vec)
 }
 
-fn tokens_to_instructions(tokens: Vec<TokenDebug>) -> Vec<Instruction> {
+fn tokens_to_instructions(tokens: Vec<TokenDebug>) -> Vec<InstructionDebug> {
     let mut instrs = Vec::new();
     let mut tokens = tokens.into_iter();
     while let Some(token) = tokens.next() {
         let debg = token.debug_info;
         let token = token.token;
 
-        match token {
+        let instr: Instruction = match token {
             Token::Op(op) => match op {
-                Op::Inbox => instrs.push(Instruction::Inbox),
-                Op::Outbox => instrs.push(Instruction::Outbox),
-                Op::Define(def) => instrs.push(Instruction::Define(def)),
+                Op::Inbox => Instruction::Inbox,
+                Op::Outbox => Instruction::Outbox,
+                Op::Define(def) => Instruction::Define(def),
                 Op::CopyFrom | Op::CopyTo | Op::BumpUp | Op::BumpDown | Op::Add | Op::Sub => {
                     let next = &tokens.next().expect("op requires address argument");
                     let next = &next.token;
                     if let Token::Address(addr) = next {
                         match op {
-                            Op::CopyFrom => instrs.push(Instruction::CopyFrom(*addr)),
-                            Op::CopyTo => instrs.push(Instruction::CopyTo(*addr)),
-                            Op::BumpUp => instrs.push(Instruction::BumpUp(*addr)),
-                            Op::BumpDown => instrs.push(Instruction::BumpDown(*addr)),
-                            Op::Add => instrs.push(Instruction::Add(*addr)),
-                            Op::Sub => instrs.push(Instruction::Sub(*addr)),
+                            Op::CopyFrom => Instruction::CopyFrom(*addr),
+                            Op::CopyTo => Instruction::CopyTo(*addr),
+                            Op::BumpUp => Instruction::BumpUp(*addr),
+                            Op::BumpDown => Instruction::BumpDown(*addr),
+                            Op::Add => Instruction::Add(*addr),
+                            Op::Sub => Instruction::Sub(*addr),
                             _ => panic!("Interpreter error, case not covered"),
                         }
                     } else {
@@ -537,15 +637,15 @@ fn tokens_to_instructions(tokens: Vec<TokenDebug>) -> Vec<Instruction> {
                     let next = &next.token;
                     match next {
                         Token::Label(label) => match op {
-                            Op::Jump => instrs.push(Instruction::Jump(label.clone())),
-                            Op::JumpN => instrs.push(Instruction::JumpN(label.clone())),
-                            Op::JumpZ => instrs.push(Instruction::JumpZ(label.clone())),
+                            Op::Jump => Instruction::Jump(label.clone()),
+                            Op::JumpN => Instruction::JumpN(label.clone()),
+                            Op::JumpZ => Instruction::JumpZ(label.clone()),
                             _ => panic!("Interpreter error, case not covered"),
                         },
                         _ => panic!(format!("Expected address, found {:?}", next)),
                     }
                 }
-                Op::LabelDef(label) => instrs.push(Instruction::LabelDef(label)),
+                Op::LabelDef(label) => Instruction::LabelDef(label),
             },
             Token::Address(_address) => {
                 eprintln!("{:?}", debg);
@@ -555,13 +655,14 @@ fn tokens_to_instructions(tokens: Vec<TokenDebug>) -> Vec<Instruction> {
                 eprintln!("{:?}", debg);
                 panic!("Label requires op taking label")
             }
-        }
+        };
+        instrs.push(InstructionDebug(instr, debg));
     }
     instrs
 }
 
 /// Return hashmap of token indicies associated with labels
-fn process_labels(instructions: &[Instruction]) -> HashMap<String, usize> {
+fn process_labels(instructions: Vec<Instruction>) -> HashMap<String, usize> {
     let mut label_map: HashMap<String, usize> = HashMap::new();
     for (instr_ptr, instruction) in instructions.iter().enumerate() {
         if let Instruction::LabelDef(name) = instruction {
@@ -571,19 +672,24 @@ fn process_labels(instructions: &[Instruction]) -> HashMap<String, usize> {
     label_map
 }
 
-fn interpret(instructions: &[Instruction], state: &mut OfficeState) {
-    let jmp_map = process_labels(&instructions);
+fn interpret(instructions: Vec<InstructionDebug>, state: &mut OfficeState) {
+    let jmp_map = process_labels(
+        instructions
+            .iter()
+            .map(|instr_debug| instr_debug.0.clone())
+            .collect(),
+    );
     let mut instr_ptr = 0_usize;
     while instr_ptr < instructions.len() {
         println!("{}", state);
         let instruction = &instructions[instr_ptr];
         println!("Executing {:?}", instruction);
-        let finished = instruction.execute(state).unwrap();
+        let finished = instruction.0.execute(state, &instruction.1).unwrap();
         if finished {
             println!("Finished running program");
             break;
         }
-        if let Some(index) = calc_jump(instruction, &jmp_map, state.held) {
+        if let Some(index) = calc_jump(&instruction.0, &jmp_map, state.held) {
             instr_ptr = index;
         } else {
             instr_ptr += 1;
@@ -627,7 +733,7 @@ fn calc_jump(
 fn run(file: File, mut state: OfficeState) -> std::io::Result<()> {
     let tokens = tokenize_hrm(file)?;
     let instructions = tokens_to_instructions(tokens);
-    interpret(&instructions, &mut state);
+    interpret(instructions, &mut state);
     Ok(())
 }
 
@@ -652,7 +758,7 @@ mod tests {
         );
         let floor = create_floor!(15, 14, tile!(0));
         let mut office_state = OfficeState::new_with_inbox_floor(inbox, floor);
-        interpret(&instructions, &mut office_state);
+        interpret(instructions, &mut office_state);
 
         let expected_output = create_inbox!(
             'a', 'b', 's', 'e', 'n', 't', 'm', 'i', 'n', 'd', 'e', 'd', 'x', 'y', 'b', 'r', 'a',
