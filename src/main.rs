@@ -163,7 +163,7 @@ impl From<i16> for OfficeTile {
 macro_rules! create_inbox {
     ( $( $x:expr ),* ) => {
         {
-            let mut inbox = VecDeque::new();
+            let mut inbox:VecDeque<OfficeTile> = VecDeque::new();
             $(
                 inbox.push_back(OfficeTile::from($x));
             )*
@@ -175,7 +175,7 @@ macro_rules! create_inbox {
 macro_rules! create_floor {
     ( $len:expr, $( $index:expr,  $tile:expr ),* ) => {
         {
-            let mut floor = Vec::with_capacity($len);
+            let mut floor:Vec<Option<OfficeTile>> = Vec::with_capacity($len);
             for _ in 0..$len {
                 floor.push(None)
             }
