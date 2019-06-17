@@ -476,7 +476,7 @@ impl Executable for Instruction {
                 match floor[addr] {
                     Some(val) => {
                         let one = OfficeTile::Number(1);
-                        let res = arithmetic_to_runtime_error(val.checked_add(one), self, debug)?;
+                        let res = arithmetic_to_runtime_error(val.checked_sub(one), self, debug)?;
                         state.floor[addr] = Some(res);
                         state.held = Some(res);
                         Ok(false)
@@ -764,8 +764,13 @@ mod tests {
     fn test_reverse_string() {
         let file = File::open("example.hrm").unwrap();
         let tokens = tokenize_hrm(file).unwrap();
-        println!("{:?}", tokens);
+        // for tok in tokens.iter() {
+        //     println!("{:?}", tok);
+        // }
         let instructions = tokens_to_instructions(tokens);
+        // for instruction in instructions.iter() {
+        //     println!("{:?}", instruction);
+        // }
         let inbox = create_inbox!(
             'b', 'r', 'a', 'i', 'n', 0, 'x', 'y', 0, 'a', 'b', 's', 'e', 'n', 't', 'm', 'i', 'n',
             'd', 'e', 'd', 0
