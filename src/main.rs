@@ -272,10 +272,7 @@ struct OfficeState {
 }
 
 impl OfficeState {
-    pub fn new_with_inbox_floor(
-        inbox: VecDeque<OfficeTile>,
-        floor: Vec<Option<OfficeTile>>,
-    ) -> OfficeState {
+    pub fn new(inbox: VecDeque<OfficeTile>, floor: Vec<Option<OfficeTile>>) -> OfficeState {
         OfficeState {
             held: None,
             inbox,
@@ -776,7 +773,7 @@ mod tests {
             'd', 'e', 'd', 0
         );
         let floor = create_floor!(15, 14, tile!(0));
-        let mut office_state = OfficeState::new_with_inbox_floor(inbox, floor);
+        let mut office_state = OfficeState::new(inbox, floor);
         interpret(instructions, &mut office_state);
 
         let expected_output = create_inbox!(
@@ -792,7 +789,7 @@ fn main() -> std::io::Result<()> {
     let inbox = create_inbox!('b', 'r', 'a', 'i', 'n', 0);
     let floor = create_floor!(15, 14, tile!(0));
 
-    let office_state = OfficeState::new_with_inbox_floor(inbox, floor);
+    let office_state = OfficeState::new(inbox, floor);
     run(file, office_state)?;
     Ok(())
 }
