@@ -69,6 +69,12 @@ impl fmt::Display for Instruction {
     }
 }
 
+impl fmt::Display for InstructionDebug {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Debug, Clone)]
 enum Define {
     Comment(usize, String),
@@ -691,7 +697,7 @@ fn interpret(instructions: Vec<InstructionDebug>, state: &mut OfficeState) {
     while instr_ptr < instructions.len() {
         println!("{}", state);
         let instruction = &instructions[instr_ptr];
-        println!("Executing {:?}", instruction);
+        println!("Executing {}", instruction);
         let finished = instruction.0.execute(state, &instruction.1).unwrap();
         if finished {
             println!("Finished running program");
