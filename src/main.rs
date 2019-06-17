@@ -294,8 +294,16 @@ impl fmt::Display for OfficeState {
         )?;
         let v = vec![
             self.floor.len() / 5 + 1,
-            self.inbox.len(),
-            self.outbox.len(),
+            if self.inbox.len() > 7 {
+                7
+            } else {
+                self.inbox.len()
+            },
+            if self.outbox.len() > 7 {
+                7
+            } else {
+                self.outbox.len()
+            },
         ];
         let rows: usize = *v.iter().max().unwrap_or(&0);
 
