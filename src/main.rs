@@ -510,7 +510,7 @@ impl Executable for Instruction {
             },
             Instruction::Outbox => match held {
                 Some(val) => {
-                    state.outbox.push_front(val);
+                    state.outbox.push_back(val);
                     state.held = None;
                     Ok(false)
                 }
@@ -741,22 +741,40 @@ fn calc_jump(
     None
 }
 
-fn run(file: File, mut state: OfficeState) -> std::io::Result<()> {
+fn run(file: File, state: &mut OfficeState) -> std::io::Result<()> {
     let tokens = tokenize_hrm(file)?;
     let instructions = tokens_to_instructions(tokens);
-    interpret(instructions, &mut state);
+    interpret(instructions, state);
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::interpret;
-    use crate::tokenize_hrm;
-    use crate::tokens_to_instructions;
-    use crate::OfficeState;
-    use crate::OfficeTile;
+    use crate::{interpret, run, tokenize_hrm, tokens_to_instructions, OfficeState, OfficeTile};
     use std::collections::VecDeque;
     use std::fs::File;
+    use std::path::Path;
+
+    static SOLUTIONS_PATH: &'static str = "./human-resource-machine-solutions";
+
+    macro_rules! test_file {
+        ( $filename:expr ) => {
+            File::open(Path::new(&format!("{}/{}", SOLUTIONS_PATH, $filename)))?;
+        };
+    }
+
+    #[test]
+    fn test_01_mail_room() -> std::io::Result<()> {
+        let file = test_file!("01-Mail-Room.size.speed.asm");
+        let inbox = create_inbox!(7, 1, 3);
+        let expected_out = create_inbox!(7, 1, 3);
+        let floor = create_floor!(0,);
+        let mut office_state = OfficeState::new(inbox, floor);
+        run(file, &mut office_state)?;
+        assert_eq!(expected_out, office_state.outbox);
+        Ok(())
+    }
+
     #[test]
     fn test_reverse_string() {
         let file = File::open("example.hrm").unwrap();
@@ -777,8 +795,8 @@ mod tests {
         interpret(instructions, &mut office_state);
 
         let expected_output = create_inbox!(
-            'a', 'b', 's', 'e', 'n', 't', 'm', 'i', 'n', 'd', 'e', 'd', 'x', 'y', 'b', 'r', 'a',
-            'i', 'n'
+            'n', 'i', 'a', 'r', 'b', 'y', 'x', 'd', 'e', 'd', 'n', 'i', 'm', 't', 'n', 'e', 's',
+            'b', 'a'
         );
         assert_eq!(expected_output, office_state.outbox);
     }
@@ -789,7 +807,7 @@ fn main() -> std::io::Result<()> {
     let inbox = create_inbox!('b', 'r', 'a', 'i', 'n', 0);
     let floor = create_floor!(15, 14, tile!(0));
 
-    let office_state = OfficeState::new(inbox, floor);
-    run(file, office_state)?;
+    let mut office_state = OfficeState::new(inbox, floor);
+    run(file, &mut office_state)?;
     Ok(())
 }

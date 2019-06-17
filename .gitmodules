@@ -1,0 +1,3 @@
+[submodule "human-resource-machine-solutions"]
+	path = human-resource-machine-solutions
+	url = https://github.com/cowboy/human-resource-machine-solutions
