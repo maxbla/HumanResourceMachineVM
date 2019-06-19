@@ -10,6 +10,14 @@ use std::collections::VecDeque;
 use std::convert::From;
 use std::fmt;
 
+#[cfg(test)]
+extern crate quickcheck;
+#[cfg(test)]
+#[macro_use(quickcheck)]
+extern crate quickcheck_macros;
+#[cfg(test)]
+use quickcheck::{Arbitrary, Gen};
+
 /// An instruction without it argument
 #[derive(Debug)]
 enum Op {
@@ -160,6 +168,12 @@ impl From<i16> for OfficeTile {
     }
 }
 
+impl From<&OfficeTile> for OfficeTile {
+    fn from(tile: &OfficeTile) -> OfficeTile {
+        *tile
+    }
+}
+
 macro_rules! create_inbox {
     ( $( $x:expr ),* ) => {
         {
@@ -199,6 +213,16 @@ impl fmt::Display for OfficeTile {
             OfficeTile::Character(c) => write!(f, "{}", c),
             OfficeTile::Number(n) => write!(f, "{}", n),
         }
+    }
+}
+
+#[cfg(test)]
+impl Arbitrary for OfficeTile {
+    fn arbitrary<G: Gen>(g: &mut G) -> OfficeTile {
+        let num = u64::arbitrary(g);
+        //transform num to a number in range [-999,999]
+        let num:i16 = (num % 1999) as i16 - 999;
+        OfficeTile::from(num)
     }
 }
 
@@ -263,7 +287,7 @@ impl OfficeTile {
 // TODO: add instruction pointer here
 /// The state of the entire office
 /// Composed of the tile held by the player, the inbox, outbox and floor
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct OfficeState {
     held: Option<OfficeTile>,
     inbox: VecDeque<OfficeTile>,
@@ -759,13 +783,13 @@ mod tests {
 
     macro_rules! test_file {
         ( $filename:expr ) => {
-            File::open(Path::new(&format!("{}/{}", SOLUTIONS_PATH, $filename)))?;
+            File::open(Path::new(&format!("{}/{}", SOLUTIONS_PATH, $filename)));
         };
     }
 
     #[test]
     fn test_01_mail_room() -> std::io::Result<()> {
-        let file = test_file!("01-Mail-Room.size.speed.asm");
+        let file = test_file!("01-Mail-Room.size.speed.asm")?;
         let inbox = create_inbox!(7, 1, 3);
         let expected_out = create_inbox!(7, 1, 3);
         let floor = create_floor!(0,);
@@ -773,6 +797,35 @@ mod tests {
         run(file, &mut office_state)?;
         assert_eq!(expected_out, office_state.outbox);
         Ok(())
+    }
+
+    #[quickcheck]
+    fn quickcheck_01_mail_room(inbox0: OfficeTile, inbox1: OfficeTile, inbox2: OfficeTile) -> bool {
+        let file = test_file!("01-Mail-Room.size.speed.asm").unwrap();
+        let initial_inbox = create_inbox!(inbox0, inbox1, inbox2);
+        let mut office_state = OfficeState::new(initial_inbox.clone(), create_floor!(0,));
+        run(file, &mut office_state).unwrap();
+        initial_inbox == office_state.outbox
+    }
+
+    #[quickcheck]
+    fn quickcheck_02_busy_mail_room_size(inbox: VecDeque<OfficeTile>) -> bool {
+        let file = test_file!("02-Busy-Mail-Room.size.asm").unwrap();
+        let mut office_state = OfficeState::new(inbox.clone(), create_floor!(0,));
+        run(file, &mut office_state).unwrap();
+        inbox == office_state.outbox
+    }
+
+    #[quickcheck]
+    fn quickcheck_02_busy_mail_room_speed(inbox: VecDeque<OfficeTile>) -> bool {
+        //this human resource machine program assumes 12 or fewer inbox items
+        let max_size = 12;
+        let mut inbox = inbox.clone();
+        inbox.truncate(max_size);
+        let file = test_file!("02-Busy-Mail-Room.speed.asm").unwrap();
+        let mut office_state = OfficeState::new(inbox.clone(), create_floor!(0,));
+        run(file, &mut office_state).unwrap();
+        inbox == office_state.outbox
     }
 
     #[test]
