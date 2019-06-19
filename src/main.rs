@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 
 use std::convert::From;
+use std::convert::TryFrom;
 use std::fmt;
 
 #[cfg(test)]
@@ -162,9 +163,22 @@ impl From<char> for OfficeTile {
     }
 }
 
-impl From<i16> for OfficeTile {
-    fn from(n: i16) -> OfficeTile {
-        OfficeTile::Number(n)
+impl From<i8> for OfficeTile {
+    fn from(n: i8) -> OfficeTile {
+        OfficeTile::Number(n as i16)
+    }
+}
+
+impl TryFrom<i16> for OfficeTile {
+
+    type Error = ArithmeticError;
+
+    fn try_from(n: i16) -> Result<OfficeTile, Self::Error> {
+        match OfficeTile::get_range().contains(&n) {
+            true => Ok(OfficeTile::Number(n)),
+            false => Err(ArithmeticError::OverflowError),
+        }
+
     }
 }
 
@@ -221,65 +235,60 @@ impl Arbitrary for OfficeTile {
     fn arbitrary<G: Gen>(g: &mut G) -> OfficeTile {
         let num = u64::arbitrary(g);
         //transform num to a number in range [-999,999]
-        let num:i16 = (num % 1999) as i16 - 999;
-        OfficeTile::from(num)
+        let num: i16 = (num % 1999) as i16 - 999;
+        OfficeTile::try_from(num).unwrap()
     }
 }
 
 impl OfficeTile {
+    #[inline]
+    fn get_range() -> std::ops::Range<i16> {
+        (-999..1000)
+    }
+
     fn checked_add(self, rhs: OfficeTile) -> Result<OfficeTile, ArithmeticError> {
-        match self {
-            OfficeTile::Number(num) => match rhs {
-                OfficeTile::Number(rhs_num) => match num.checked_add(rhs_num) {
-                    Some(res) => {
-                        if res > 999_i16 {
-                            return Err(ArithmeticError::OverflowError);
-                        }
-                        Ok(OfficeTile::Number(res))
-                    }
-                    None => Err(ArithmeticError::OverflowError),
+        match (self, rhs) {
+            (OfficeTile::Number(lhs), OfficeTile::Number(rhs)) => match lhs.checked_add(rhs) {
+                Some(res) => match OfficeTile::get_range().contains(&res) {
+                    true => Ok(OfficeTile::Number(res)),
+                    false => Err(ArithmeticError::OverflowError),
                 },
-                OfficeTile::Character(_) => Err(ArithmeticError::TypeError),
+                None => Err(ArithmeticError::OverflowError),
             },
-            OfficeTile::Character(character) => match rhs {
-                OfficeTile::Character(rhs_char) => {
-                    match (character as i16).checked_add(rhs_char as i16) {
-                        Some(res) => {
-                            if res > 999_i16 {
-                                return Err(ArithmeticError::OverflowError);
-                            }
-                            Ok(OfficeTile::Number(res))
-                        }
-                        None => Err(ArithmeticError::OverflowError),
-                    }
+            (OfficeTile::Character(lhs), OfficeTile::Character(rhs)) => {
+                match (lhs as i16).checked_add(rhs as i16) {
+                    Some(res) => match OfficeTile::get_range().contains(&res) {
+                        true => Ok(OfficeTile::Number(res)),
+                        false => Err(ArithmeticError::OverflowError),
+                    },
+                    None => Err(ArithmeticError::OverflowError),
                 }
-                OfficeTile::Number(_) => Err(ArithmeticError::TypeError),
-            },
+            }
+            (OfficeTile::Number(_), OfficeTile::Character(_)) => Err(ArithmeticError::TypeError),
+            (OfficeTile::Character(_), OfficeTile::Number(_)) => Err(ArithmeticError::TypeError),
         }
     }
 
     fn checked_sub(self, rhs: OfficeTile) -> Result<OfficeTile, ArithmeticError> {
-        match self {
-            OfficeTile::Number(num) => match rhs {
-                OfficeTile::Number(other_num) => {
-                    let res = num - other_num;
-                    if res < -999_i16 {
-                        return Err(ArithmeticError::OverflowError);
-                    }
-                    Ok(OfficeTile::Number(res))
-                }
-                OfficeTile::Character(_) => Err(ArithmeticError::TypeError),
+        match (self, rhs) {
+            (OfficeTile::Number(lhs), OfficeTile::Number(rhs)) => match lhs.checked_sub(rhs) {
+                Some(res) => match OfficeTile::get_range().contains(&res) {
+                    true => Ok(OfficeTile::Number(res)),
+                    false => Err(ArithmeticError::OverflowError),
+                },
+                None => Err(ArithmeticError::OverflowError),
             },
-            OfficeTile::Character(character) => match rhs {
-                OfficeTile::Character(other_char) => {
-                    let res: i16 = character as i16 - other_char as i16;
-                    if res < -999_i16 {
-                        return Err(ArithmeticError::OverflowError);
-                    }
-                    Ok(OfficeTile::Number(res))
+            (OfficeTile::Character(lhs), OfficeTile::Character(rhs)) => {
+                match (lhs as i16).checked_sub(rhs as i16) {
+                    Some(res) => match OfficeTile::get_range().contains(&res) {
+                        true => Ok(OfficeTile::Number(res)),
+                        false => Err(ArithmeticError::OverflowError),
+                    },
+                    None => Err(ArithmeticError::OverflowError),
                 }
-                OfficeTile::Number(_) => Err(ArithmeticError::TypeError),
-            },
+            }
+            (OfficeTile::Number(_), OfficeTile::Character(_)) => Err(ArithmeticError::TypeError),
+            (OfficeTile::Character(_), OfficeTile::Number(_)) => Err(ArithmeticError::TypeError),
         }
     }
 }
@@ -417,6 +426,17 @@ impl fmt::Debug for RuntimeError {
                 writeln!(f, "can't {} - Incompatible types", instr)?;
                 writeln!(f, "line: {}", info.line)
             }
+        }
+    }
+}
+
+impl fmt::Debug for ArithmeticError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ArithmeticError::OverflowError => {
+                write!(f, "Overflow Error. Number exceeded allowed range")
+            }
+            ArithmeticError::TypeError => write!(f, "Type Error. Cannot operate on those operands"),
         }
     }
 }
