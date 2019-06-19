@@ -717,14 +717,17 @@ fn interpret(instructions: Vec<InstructionDebug>, state: &mut OfficeState) {
     let mut instr_ptr = 0_usize;
     while instr_ptr < instructions.len() {
         println!("{}", state);
-        let instruction = &instructions[instr_ptr];
+        let InstructionDebug {
+            0: instruction,
+            1: debug,
+        } = &instructions[instr_ptr];
         println!("Executing {}", instruction);
-        let finished = instruction.0.execute(state, &instruction.1).unwrap();
+        let finished = instruction.execute(state, &debug).unwrap();
         if finished {
             println!("Finished running program");
             break;
         }
-        if let Some(index) = calc_jump(&instruction.0, &jmp_map, state.held) {
+        if let Some(index) = calc_jump(&instruction, &jmp_map, state.held) {
             instr_ptr = index;
         } else {
             instr_ptr += 1;
