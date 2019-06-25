@@ -11,3 +11,7 @@ Run human resource machine programs using rust!
 - [x] set up CI
 - [ ] test all levels from the original game
 - [ ] stabalize public API
+
+## Similar Projects
+
+The same idea implemented in javascript [here](https://github.com/nrkn/hrm-cpu)
