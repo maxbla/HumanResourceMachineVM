@@ -755,7 +755,7 @@ fn process_labels(instructions: Vec<Instruction>) -> HashMap<String, usize> {
 }
 
 fn interpret(
-    instructions: Vec<InstructionDebug>,
+    instructions: &Vec<InstructionDebug>,
     state: &mut OfficeState,
 ) -> Result<(), RuntimeError> {
     let jmp_map = process_labels(
@@ -822,7 +822,7 @@ fn calc_jump(
 fn run(file: File, state: &mut OfficeState) -> Result<(), Box<Error>> {
     let tokens = tokenize_hrm(file)?;
     let instructions = tokens_to_instructions(tokens);
-    interpret(instructions, state)?;
+    interpret(&instructions, state)?;
     Ok(())
 }
 
@@ -907,9 +907,9 @@ mod tests {
         let instructions = tokens_to_instructions(tokens);
         let floor = create_floor!(len 3,);
         let mut first_office_state = OfficeState::new(inbox.clone(), floor.clone());
-        interpret(instructions.clone(), &mut first_office_state).unwrap();
+        interpret(&instructions, &mut first_office_state).unwrap();
         let mut office_state = OfficeState::new(first_office_state.outbox.clone(), floor.clone());
-        interpret(instructions.clone(), &mut office_state).unwrap();
+        interpret(&instructions, &mut office_state).unwrap();
         inbox == office_state.outbox && first_office_state.outbox == pairwise_reverse(inbox)
     }
 
@@ -962,6 +962,30 @@ mod tests {
             }
         }
         Ok(outbox)
+    }
+
+    #[quickcheck]
+    fn quickcheck_07_zero_exterminator(inbox: VecDeque<OfficeTile>) -> bool {
+        let file = test_file!("07-Zero-Exterminator.size.speed.asm").unwrap();
+        let floor = create_floor!(len 9,);
+        let mut office_state = OfficeState::new(inbox.clone(), floor);
+        let tokens = tokenize_hrm(file).unwrap();
+        let instructions = tokens_to_instructions(tokens);
+        interpret(&instructions, &mut office_state).unwrap();
+        let first_office_state = office_state.clone();
+        interpret(&instructions, &mut office_state).unwrap();
+        first_office_state.outbox == office_state.outbox
+            && eliminate_zeroes(inbox) == first_office_state.outbox
+    }
+
+    fn eliminate_zeroes(inbox: VecDeque<OfficeTile>) -> VecDeque<OfficeTile> {
+        let mut res = VecDeque::new();
+        for tile in inbox {
+            if tile != tile!(0) {
+                res.push_back(tile)
+            }
+        }
+        res
     }
 
     #[test]
