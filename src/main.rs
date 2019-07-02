@@ -1,4 +1,4 @@
-use std::error;
+use std::error::Error;
 use std::fs::File;
 
 use std::io::BufRead;
@@ -404,6 +404,7 @@ impl Addressable for Address {
     }
 }
 
+#[derive(Debug)]
 enum RuntimeError {
     EmptyHandsError(DebugInfo, Instruction),
     EmptyTileError(DebugInfo, Instruction),
@@ -411,13 +412,13 @@ enum RuntimeError {
     TypeError(DebugInfo, Instruction),
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 enum ArithmeticError {
     OverflowError,
     TypeError,
 }
 
-impl fmt::Debug for RuntimeError {
+impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             RuntimeError::EmptyHandsError(info, instr) => {
@@ -440,7 +441,11 @@ impl fmt::Debug for RuntimeError {
     }
 }
 
-impl fmt::Debug for ArithmeticError {
+impl Error for RuntimeError {}
+
+impl Error for ArithmeticError {}
+
+impl fmt::Display for ArithmeticError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             ArithmeticError::OverflowError => {
@@ -591,7 +596,7 @@ impl Executable for Instruction {
     }
 }
 
-fn tokenize_hrm(file: File) -> std::io::Result<(Vec<TokenDebug>)> {
+fn tokenize_hrm(file: File) -> Result<Vec<TokenDebug>, Box<Error>> {
     let reader = BufReader::new(file);
     let mut lines = reader.lines().enumerate();
     {
@@ -814,10 +819,10 @@ fn calc_jump(
     None
 }
 
-fn run(file: File, state: &mut OfficeState) -> std::io::Result<()> {
+fn run(file: File, state: &mut OfficeState) -> Result<(), Box<Error>> {
     let tokens = tokenize_hrm(file)?;
     let instructions = tokens_to_instructions(tokens);
-    interpret(instructions, state).unwrap();
+    interpret(instructions, state)?;
     Ok(())
 }
 
@@ -827,9 +832,11 @@ mod tests {
         interpret, run, tokenize_hrm, tokens_to_instructions, ArithmeticError, OfficeState,
         OfficeTile, RuntimeError,
     };
+
+
     use std::collections::VecDeque;
     use std::convert::TryFrom;
-
+    use std::error::Error;
     use std::fs::File;
     use std::path::Path;
 
@@ -842,7 +849,7 @@ mod tests {
     }
 
     #[test]
-    fn test_01_mail_room() -> std::io::Result<()> {
+    fn test_01_mail_room() -> Result<(), Box<Error>> {
         let file = test_file!("01-Mail-Room.size.speed.asm")?;
         let inbox = create_inbox!(7, 1, 3);
         let expected_out = create_inbox!(7, 1, 3);
@@ -927,16 +934,15 @@ mod tests {
         let mut inbox = inbox.clone();
         inbox.truncate(inbox.len() / 2 * 2);
         let file = test_file!("06-Rainy-Summer.size.speed.asm").unwrap();
-        let tokens = tokenize_hrm(file).unwrap();
-        let instructions = tokens_to_instructions(tokens);
         let floor = create_floor!(len 3,);
         let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
-        let res = interpret(instructions, &mut office_state);
+        let res = run(file, &mut office_state);
         let expected = pairwise_sum(inbox);
         match (res, expected) {
-            (Err(rt_err), Err(arith_err)) => {
-                ArithmeticError::try_from(rt_err).unwrap() == arith_err
-            }
+            (Err(boxed_err), Err(arith_err)) => match boxed_err.downcast::<RuntimeError>() {
+                Ok(err) => ArithmeticError::try_from(*err).unwrap() == arith_err,
+                _ => false,
+            },
             (Ok(_), Ok(expected)) => expected == office_state.outbox,
             _ => false,
         }
@@ -959,23 +965,15 @@ mod tests {
     }
 
     #[test]
-    fn test_reverse_string() -> Result<(), RuntimeError> {
+    fn test_reverse_string() -> Result<(), Box<Error>> {
         let file = File::open("example.hrm").unwrap();
-        let tokens = tokenize_hrm(file).unwrap();
-        // for tok in tokens.iter() {
-        //     println!("{:?}", tok);
-        // }
-        let instructions = tokens_to_instructions(tokens);
-        // for instruction in instructions.iter() {
-        //     println!("{:?}", instruction);
-        // }
         let inbox = create_inbox!(
             'b', 'r', 'a', 'i', 'n', 0, 'x', 'y', 0, 'a', 'b', 's', 'e', 'n', 't', 'm', 'i', 'n',
             'd', 'e', 'd', 0
         );
         let floor = create_floor!(len 15, 14, tile!(0));
         let mut office_state = OfficeState::new(inbox, floor);
-        interpret(instructions, &mut office_state)?;
+        run(file, &mut office_state)?;
 
         let expected_output = create_inbox!(
             'n', 'i', 'a', 'r', 'b', 'y', 'x', 'd', 'e', 'd', 'n', 'i', 'm', 't', 'n', 'e', 's',
@@ -990,7 +988,7 @@ mod tests {
     }
 }
 
-fn main() -> std::io::Result<()> {
+fn main() -> Result<(), Box<Error>> {
     let file = File::open("example.hrm")?;
     let inbox = create_inbox!('b', 'r', 'a', 'i', 'n', 0);
     let floor = create_floor!(len 15, 14, tile!(0));
