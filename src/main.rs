@@ -190,6 +190,11 @@ impl From<&OfficeTile> for OfficeTile {
 }
 
 macro_rules! create_inbox {
+    () => { //avoids warnings for unused_mut when adding zero elements
+        {
+            VecDeque::<OfficeTile>::new()
+        }
+    };
     ( $( $x:expr ),* ) => {
         {
             let mut inbox:VecDeque<OfficeTile> = VecDeque::new();
@@ -987,6 +992,189 @@ mod tests {
             }
         }
         res
+    }
+
+    #[quickcheck]
+    fn quickcheck_08_tripler_room(inbox: VecDeque<OfficeTile>) -> bool {
+        let mut file = test_file!("08-Tripler-Room.size.speed.asm").unwrap();
+        let floor = create_floor!(len 3,);
+        let mut office_state = OfficeState::new(inbox.clone(), floor);
+        let res = run(&mut file, &mut office_state);
+        let expected = triple(inbox);
+        match (res, expected) {
+            (Ok(_), Ok(expected_out)) => office_state.outbox == expected_out,
+            (Err(boxed_err), Err(arith_err)) => match boxed_err.downcast::<RuntimeError>() {
+                Ok(err) => ArithmeticError::try_from(*err).unwrap() == arith_err,
+                _ => false,
+            },
+            (_, _) => false,
+        }
+    }
+
+    fn triple(inbox: VecDeque<OfficeTile>) -> Result<VecDeque<OfficeTile>, ArithmeticError> {
+        let mut res = VecDeque::new();
+        for tile in inbox {
+            let double = tile.checked_add(tile)?;
+            let triple = double.checked_add(tile)?;
+            res.push_back(triple)
+        }
+        Ok(res)
+    }
+
+    #[test]
+    fn test_08_tripler_room() -> Result<(), Box<Error>> {
+        let mut file = test_file!("08-Tripler-Room.size.speed.asm")?;
+        let tokens = tokenize_hrm(&mut file)?;
+        let instructions = tokens_to_instructions(tokens);
+        let floor = create_floor!(len 3,);
+        {
+            //test zero
+            let inbox = create_inbox!();
+            let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
+            interpret(&instructions, &mut office_state)?;
+            let expected = triple(inbox)?;
+            assert_eq!(office_state.outbox, expected);
+        };
+        {
+            //test one
+            let inbox = create_inbox!(1);
+            let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
+            interpret(&instructions, &mut office_state)?;
+            assert_eq!(office_state.outbox, create_inbox!(3));
+        };
+        {
+            //test many
+            let inbox: VecDeque<OfficeTile> = (0..100).map(|e| OfficeTile::from(e)).collect();
+            let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
+            interpret(&instructions, &mut office_state)?;
+            let expected = triple(inbox)?;
+            assert_eq!(office_state.outbox, expected);
+        };
+        {
+            //test max
+            let mut inbox: VecDeque<OfficeTile> = VecDeque::new();
+            let one_third_of_max = OfficeTile::try_from(333_i16)?;
+            inbox.push_back(one_third_of_max);
+            let mut expected: VecDeque<OfficeTile> = VecDeque::new();
+            let max = OfficeTile::try_from(999_i16)?;
+            expected.push_back(max);
+            let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
+            interpret(&instructions, &mut office_state)?;
+            assert_eq!(office_state.outbox, expected);
+        };
+        {
+            //test min
+            let mut inbox: VecDeque<OfficeTile> = VecDeque::new();
+            let one_third_of_max = OfficeTile::try_from(-333_i16)?;
+            inbox.push_back(one_third_of_max);
+            let mut expected: VecDeque<OfficeTile> = VecDeque::new();
+            let max = OfficeTile::try_from(-999_i16)?;
+            expected.push_back(max);
+            let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
+            interpret(&instructions, &mut office_state)?;
+            assert_eq!(office_state.outbox, expected);
+        };
+        Ok(())
+    }
+
+    #[quickcheck]
+    fn quickcheck_09_zero_preservation_initiative(inbox: VecDeque<OfficeTile>) -> bool {
+        let mut file = test_file!("09-Zero-Preservation-Initiative.size.asm").unwrap();
+        let floor = create_floor!(len 9,);
+        let mut office_state = OfficeState::new(inbox.clone(), floor);
+        let tokens = tokenize_hrm(&mut file).unwrap();
+        let instructions = tokens_to_instructions(tokens);
+        interpret(&instructions, &mut office_state).unwrap();
+        let first_outbox = office_state.outbox.clone();
+        interpret(&instructions, &mut office_state).unwrap();
+        first_outbox == office_state.outbox
+            && first_outbox
+                .iter()
+                .fold(true, |acc, e| acc && (*e == tile!(0)))
+    }
+
+    #[quickcheck]
+    fn quickcheck_10_octoplier_suite(inbox: VecDeque<OfficeTile>) -> bool {
+        let mut file = test_file!("10-Octoplier-Suite.size.speed.asm").unwrap();
+        let floor = create_floor!(len 5,);
+        let mut office_state = OfficeState::new(inbox.clone(), floor);
+        let res = run(&mut file, &mut office_state);
+        let expected = octoply(inbox);
+        match (res, expected) {
+            (Ok(_), Ok(expected_out)) => office_state.outbox == expected_out,
+            (Err(boxed_err), Err(arith_err)) => match boxed_err.downcast::<RuntimeError>() {
+                Ok(err) => ArithmeticError::try_from(*err).unwrap() == arith_err,
+                _ => false,
+            },
+            (_, _) => false,
+        }
+    }
+
+    fn octoply(inbox: VecDeque<OfficeTile>) -> Result<VecDeque<OfficeTile>, ArithmeticError> {
+        let mut res = VecDeque::new();
+        for tile in inbox {
+            let x2 = tile.checked_add(tile)?;
+            let x4 = x2.checked_add(x2)?;
+            let x8 = x4.checked_add(x4)?;
+            res.push_back(x8);
+        }
+        Ok(res)
+    }
+
+    #[test]
+    fn test_10_octoplier_suite() -> Result<(), Box<Error>> {
+        let mut file = test_file!("10-Octoplier-Suite.size.speed.asm")?;
+        let tokens = tokenize_hrm(&mut file)?;
+        let instructions = tokens_to_instructions(tokens);
+        let floor = create_floor!(len 3,);
+        {
+            //test zero
+            let inbox = create_inbox!();
+            let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
+            interpret(&instructions, &mut office_state)?;
+            let expected = octoply(inbox)?;
+            assert_eq!(office_state.outbox, expected);
+        };
+        {
+            //test one
+            let inbox = create_inbox!(1);
+            let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
+            interpret(&instructions, &mut office_state)?;
+            assert_eq!(office_state.outbox, create_inbox!(8));
+        };
+        {
+            //test many
+            let inbox: VecDeque<OfficeTile> = (0..100).map(|e| OfficeTile::from(e)).collect();
+            let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
+            interpret(&instructions, &mut office_state)?;
+            let expected = octoply(inbox)?;
+            assert_eq!(office_state.outbox, expected);
+        };
+        {
+            //test max
+            let mut inbox: VecDeque<OfficeTile> = VecDeque::new();
+            let one_eigth_of_max = tile!(124);
+            inbox.push_back(one_eigth_of_max);
+            let mut expected: VecDeque<OfficeTile> = VecDeque::new();
+            let max = OfficeTile::try_from(992_i16)?;
+            expected.push_back(max);
+            let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
+            interpret(&instructions, &mut office_state)?;
+            assert_eq!(office_state.outbox, expected);
+        };
+        {
+            //test min
+            let mut inbox: VecDeque<OfficeTile> = VecDeque::new();
+            let one_third_of_max = tile!(-124);
+            inbox.push_back(one_third_of_max);
+            let mut expected: VecDeque<OfficeTile> = VecDeque::new();
+            let max = OfficeTile::try_from(-992_i16)?;
+            expected.push_back(max);
+            let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
+            interpret(&instructions, &mut office_state)?;
+            assert_eq!(office_state.outbox, expected);
+        };
+        Ok(())
     }
 
     #[test]
