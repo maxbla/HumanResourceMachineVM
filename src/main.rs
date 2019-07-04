@@ -610,7 +610,7 @@ impl Executable for Instruction {
     }
 }
 
-fn tokenize_hrm(read: &mut Read) -> Result<Vec<TokenDebug>, Box<Error>> {
+fn tokenize_hrm(read: &mut dyn Read) -> Result<Vec<TokenDebug>, Box<dyn Error>> {
     let reader = BufReader::new(read);
     let mut lines = reader.lines().enumerate();
     {
@@ -838,7 +838,7 @@ fn calc_jump(
     None
 }
 
-fn run(read: &mut Read, state: &mut OfficeState) -> Result<(), Box<Error>> {
+fn run(read: &mut dyn Read, state: &mut OfficeState) -> Result<(), Box<dyn Error>> {
     let tokens = tokenize_hrm(read)?;
     let instructions = tokens_to_instructions(tokens);
     interpret(&instructions, state)?;
@@ -868,7 +868,7 @@ mod tests {
     }
 
     #[test]
-    fn test_01_mail_room() -> Result<(), Box<Error>> {
+    fn test_01_mail_room() -> Result<(), Box<dyn Error>> {
         let mut file = test_file!("01-Mail-Room.size.speed.asm")?;
         let inbox = create_inbox!(7, 1, 3);
         let expected_out = create_inbox!(7, 1, 3);
@@ -1031,7 +1031,7 @@ mod tests {
     }
 
     #[test]
-    fn test_08_tripler_room() -> Result<(), Box<Error>> {
+    fn test_08_tripler_room() -> Result<(), Box<dyn Error>> {
         let mut file = test_file!("08-Tripler-Room.size.speed.asm")?;
         let tokens = tokenize_hrm(&mut file)?;
         let instructions = tokens_to_instructions(tokens);
@@ -1128,7 +1128,7 @@ mod tests {
     }
 
     #[test]
-    fn test_10_octoplier_suite() -> Result<(), Box<Error>> {
+    fn test_10_octoplier_suite() -> Result<(), Box<dyn Error>> {
         let mut file = test_file!("10-Octoplier-Suite.size.speed.asm")?;
         let tokens = tokenize_hrm(&mut file)?;
         let instructions = tokens_to_instructions(tokens);
@@ -1184,7 +1184,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reverse_string() -> Result<(), Box<Error>> {
+    fn test_reverse_string() -> Result<(), Box<dyn Error>> {
         let mut file = File::open("example.hrm").unwrap();
         let inbox = create_inbox!(
             'b', 'r', 'a', 'i', 'n', 0, 'x', 'y', 0, 'a', 'b', 's', 'e', 'n', 't', 'm', 'i', 'n',
@@ -1207,7 +1207,7 @@ mod tests {
     }
 }
 
-fn main() -> Result<(), Box<Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     let mut file = File::open("example.hrm")?;
     let inbox = create_inbox!('b', 'r', 'a', 'i', 'n', 0);
     let floor = create_floor!(len 15, 14, tile!(0));
