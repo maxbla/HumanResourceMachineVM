@@ -1,4 +1,5 @@
 #![deny(warnings)]
+#![deny(clippy::all)]
 use std::error::Error;
 use std::fs::File;
 
@@ -152,7 +153,7 @@ struct DebugInfo {
 
 /// A value
 /// Can either be a character or a number (integer)
-/// OfficeTiles come in the inbox, are placed on the floor and go out the outbox
+/// `OfficeTile`s come in the inbox, are placed on the floor and go out the outbox
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum OfficeTile {
     Number(i16),     //numbers in human resource machine are in -999..=999
@@ -160,14 +161,14 @@ enum OfficeTile {
 }
 
 impl From<char> for OfficeTile {
-    fn from(c: char) -> OfficeTile {
+    fn from(c: char) -> Self {
         OfficeTile::Character(c)
     }
 }
 
 impl From<i8> for OfficeTile {
-    fn from(n: i8) -> OfficeTile {
-        OfficeTile::Number(n as i16)
+    fn from(n: i8) -> Self {
+        OfficeTile::Number(i16::from(n))
     }
 }
 
@@ -175,17 +176,18 @@ impl TryFrom<i16> for OfficeTile {
 
     type Error = ArithmeticError;
 
-    fn try_from(n: i16) -> Result<OfficeTile, Self::Error> {
-        match OfficeTile::get_range().contains(&n) {
-            true => Ok(OfficeTile::Number(n)),
-            false => Err(ArithmeticError::OverflowError),
+    fn try_from(n: i16) -> Result<Self, Self::Error> {
+        if Self::get_range().contains(&n) {
+            Ok(OfficeTile::Number(n))
+        } else {
+            Err(ArithmeticError::Overflow)
         }
 
     }
 }
 
 impl From<&OfficeTile> for OfficeTile {
-    fn from(tile: &OfficeTile) -> OfficeTile {
+    fn from(tile: &Self) -> Self {
         *tile
     }
 }
@@ -248,11 +250,10 @@ impl fmt::Display for OfficeTile {
 
 #[cfg(test)]
 impl Arbitrary for OfficeTile {
-    fn arbitrary<G: Gen>(g: &mut G) -> OfficeTile {
-        let num = u64::arbitrary(g);
-        //transform num to a number in range [-999,999]
-        let num: i16 = (num % 1999) as i16 - 999;
-        OfficeTile::try_from(num).unwrap()
+    fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        //random number in range [-999,999]
+        let num = i16::arbitrary(g) % 999;
+        Self::try_from(num).unwrap()
     }
 }
 
@@ -262,49 +263,61 @@ impl OfficeTile {
         (-999..1000)
     }
 
-    fn checked_add(self, rhs: OfficeTile) -> Result<OfficeTile, ArithmeticError> {
+    fn checked_add(self, rhs: Self) -> Result<Self, ArithmeticError> {
         match (self, rhs) {
             (OfficeTile::Number(lhs), OfficeTile::Number(rhs)) => match lhs.checked_add(rhs) {
-                Some(res) => match OfficeTile::get_range().contains(&res) {
-                    true => Ok(OfficeTile::Number(res)),
-                    false => Err(ArithmeticError::OverflowError),
-                },
-                None => Err(ArithmeticError::OverflowError),
+                Some(sum) => {
+                    if Self::get_range().contains(&sum) {
+                        Ok(OfficeTile::Number(sum))
+                    } else {
+                        Err(ArithmeticError::Overflow)
+                    }
+                }
+                None => Err(ArithmeticError::Overflow),
             },
             (OfficeTile::Character(lhs), OfficeTile::Character(rhs)) => {
                 match (lhs as i16).checked_add(rhs as i16) {
-                    Some(res) => match OfficeTile::get_range().contains(&res) {
-                        true => Ok(OfficeTile::Number(res)),
-                        false => Err(ArithmeticError::OverflowError),
-                    },
-                    None => Err(ArithmeticError::OverflowError),
+                    Some(sum) => {
+                        if Self::get_range().contains(&sum) {
+                            Ok(OfficeTile::Number(sum))
+                        } else {
+                            Err(ArithmeticError::Overflow)
+                        }
+                    }
+                    None => Err(ArithmeticError::Overflow),
                 }
             }
-            (OfficeTile::Number(_), OfficeTile::Character(_)) => Err(ArithmeticError::TypeError),
-            (OfficeTile::Character(_), OfficeTile::Number(_)) => Err(ArithmeticError::TypeError),
+            (OfficeTile::Number(_), OfficeTile::Character(_))
+            | (OfficeTile::Character(_), OfficeTile::Number(_)) => Err(ArithmeticError::TypeError),
         }
     }
 
-    fn checked_sub(self, rhs: OfficeTile) -> Result<OfficeTile, ArithmeticError> {
+    fn checked_sub(self, rhs: Self) -> Result<Self, ArithmeticError> {
         match (self, rhs) {
             (OfficeTile::Number(lhs), OfficeTile::Number(rhs)) => match lhs.checked_sub(rhs) {
-                Some(res) => match OfficeTile::get_range().contains(&res) {
-                    true => Ok(OfficeTile::Number(res)),
-                    false => Err(ArithmeticError::OverflowError),
-                },
-                None => Err(ArithmeticError::OverflowError),
+                Some(diff) => {
+                    if Self::get_range().contains(&diff) {
+                        Ok(OfficeTile::Number(diff))
+                    } else {
+                        Err(ArithmeticError::Overflow)
+                    }
+                }
+                None => Err(ArithmeticError::Overflow),
             },
             (OfficeTile::Character(lhs), OfficeTile::Character(rhs)) => {
                 match (lhs as i16).checked_sub(rhs as i16) {
-                    Some(res) => match OfficeTile::get_range().contains(&res) {
-                        true => Ok(OfficeTile::Number(res)),
-                        false => Err(ArithmeticError::OverflowError),
-                    },
-                    None => Err(ArithmeticError::OverflowError),
+                    Some(diff) => {
+                        if Self::get_range().contains(&diff) {
+                            Ok(OfficeTile::Number(diff))
+                        } else {
+                            Err(ArithmeticError::Overflow)
+                        }
+                    }
+                    None => Err(ArithmeticError::Overflow),
                 }
             }
-            (OfficeTile::Number(_), OfficeTile::Character(_)) => Err(ArithmeticError::TypeError),
-            (OfficeTile::Character(_), OfficeTile::Number(_)) => Err(ArithmeticError::TypeError),
+            (OfficeTile::Number(_), OfficeTile::Character(_))
+            | (OfficeTile::Character(_), OfficeTile::Number(_)) => Err(ArithmeticError::TypeError),
         }
     }
 }
@@ -321,8 +334,8 @@ struct OfficeState {
 }
 
 impl OfficeState {
-    pub fn new(inbox: VecDeque<OfficeTile>, floor: Vec<Option<OfficeTile>>) -> OfficeState {
-        OfficeState {
+    pub fn new(inbox: VecDeque<OfficeTile>, floor: Vec<Option<OfficeTile>>) -> Self {
+        Self {
             held: None,
             inbox,
             outbox: vec![].into_iter().collect(),
@@ -333,7 +346,7 @@ impl OfficeState {
 
 impl fmt::Display for OfficeState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let OfficeState {
+        let Self {
             inbox,
             outbox,
             floor,
@@ -401,7 +414,7 @@ impl Addressable for Address {
                         if num < 0 {
                             panic!("Cannot jump to negative address")
                         }
-                        num as usize
+                        usize::try_from(num).unwrap()
                     }
                     OfficeTile::Character(_) => panic!("Character cannot be used as address"),
                 }
@@ -413,30 +426,30 @@ impl Addressable for Address {
 
 #[derive(Debug)]
 enum RuntimeError {
-    EmptyHandsError(DebugInfo, Instruction),
-    EmptyTileError(DebugInfo, Instruction),
-    OverflowError(DebugInfo, Instruction),
+    EmptyHands(DebugInfo, Instruction),
+    EmptyTile(DebugInfo, Instruction),
+    Overflow(DebugInfo, Instruction),
     TypeError(DebugInfo, Instruction),
 }
 
 #[derive(PartialEq, Eq, Debug)]
 enum ArithmeticError {
-    OverflowError,
+    Overflow,
     TypeError,
 }
 
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            RuntimeError::EmptyHandsError(info, instr) => {
+            RuntimeError::EmptyHands(info, instr) => {
                 writeln!(f, "Can't do {} - your hands are empty!", instr)?;
                 writeln!(f, "line: {}", info.line)
             }
-            RuntimeError::EmptyTileError(info, instr) => {
+            RuntimeError::EmptyTile(info, instr) => {
                 writeln!(f, "Can't {} - the tile is empty!", instr)?;
                 writeln!(f, "line: {}", info.line)
             }
-            RuntimeError::OverflowError(info, instr) => {
+            RuntimeError::Overflow(info, instr) => {
                 writeln!(f, "Operation: {} overflowed", instr)?;
                 writeln!(f, "line: {}", info.line)
             }
@@ -455,9 +468,7 @@ impl Error for ArithmeticError {}
 impl fmt::Display for ArithmeticError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ArithmeticError::OverflowError => {
-                write!(f, "Overflow Error. Number exceeded allowed range")
-            }
+            ArithmeticError::Overflow => write!(f, "Overflow Error. Number exceeded allowed range"),
             ArithmeticError::TypeError => write!(f, "Type Error. Cannot operate on those operands"),
         }
     }
@@ -466,9 +477,9 @@ impl fmt::Display for ArithmeticError {
 impl TryFrom<RuntimeError> for ArithmeticError {
     type Error = ();
 
-    fn try_from(e: RuntimeError) -> Result<ArithmeticError, ()> {
+    fn try_from(e: RuntimeError) -> Result<Self, ()> {
         match e {
-            RuntimeError::OverflowError(_, _) => Ok(ArithmeticError::OverflowError),
+            RuntimeError::Overflow(_, _) => Ok(ArithmeticError::Overflow),
             RuntimeError::TypeError(_, _) => Ok(ArithmeticError::TypeError),
             _ => Err(()),
         }
@@ -487,12 +498,8 @@ fn arithmetic_to_runtime_error(
     match val {
         Ok(num) => Ok(num),
         Err(err) => match err {
-            ArithmeticError::OverflowError => {
-                return Err(RuntimeError::OverflowError(debug, instr.clone()))
-            }
-            ArithmeticError::TypeError => {
-                return Err(RuntimeError::TypeError(debug, instr.clone()))
-            }
+            ArithmeticError::Overflow => Err(RuntimeError::Overflow(debug, instr.clone())),
+            ArithmeticError::TypeError => Err(RuntimeError::TypeError(debug, instr.clone())),
         },
     }
 }
@@ -506,14 +513,14 @@ impl Executable for Instruction {
             Instruction::Add(addr) => {
                 let addr = addr.get_value(state);
                 match floor[addr] {
-                    None => return Err(RuntimeError::EmptyTileError(debug, self.clone())),
+                    None => Err(RuntimeError::EmptyTile(debug, self.clone())),
                     Some(val) => match held {
-                        None => return Err(RuntimeError::EmptyHandsError(debug, self.clone())),
+                        None => Err(RuntimeError::EmptyHands(debug, self.clone())),
                         Some(held) => {
                             let res =
                                 arithmetic_to_runtime_error(held.checked_add(val), self, debug)?;
                             state.held = Some(res);
-                            return Ok(false);
+                            Ok(false)
                         }
                     },
                 }
@@ -521,14 +528,14 @@ impl Executable for Instruction {
             Instruction::Sub(addr) => {
                 let addr = addr.get_value(state);
                 match floor[addr] {
-                    None => return Err(RuntimeError::EmptyTileError(debug, self.clone())),
+                    None => Err(RuntimeError::EmptyTile(debug, self.clone())),
                     Some(val) => match held {
-                        None => return Err(RuntimeError::EmptyHandsError(debug, self.clone())),
+                        None => Err(RuntimeError::EmptyHands(debug, self.clone())),
                         Some(held) => {
                             let res =
                                 arithmetic_to_runtime_error(held.checked_sub(val), self, debug)?;
                             state.held = Some(res);
-                            return Ok(false);
+                            Ok(false)
                         }
                     },
                 }
@@ -541,9 +548,9 @@ impl Executable for Instruction {
                         let res = arithmetic_to_runtime_error(val.checked_add(one), self, debug)?;
                         state.floor[addr] = Some(res);
                         state.held = Some(res);
-                        return Ok(false);
+                        Ok(false)
                     }
-                    None => Err(RuntimeError::EmptyTileError(debug, self.clone())),
+                    None => Err(RuntimeError::EmptyTile(debug, self.clone())),
                 }
             }
             Instruction::BumpDown(addr) => {
@@ -556,7 +563,7 @@ impl Executable for Instruction {
                         state.held = Some(res);
                         Ok(false)
                     }
-                    None => Err(RuntimeError::EmptyTileError(debug, self.clone())),
+                    None => Err(RuntimeError::EmptyTile(debug, self.clone())),
                 }
             }
             Instruction::CopyFrom(addr) => {
@@ -566,7 +573,7 @@ impl Executable for Instruction {
                         state.held = Some(val);
                         Ok(false)
                     }
-                    None => Err(RuntimeError::EmptyTileError(debug, self.clone())),
+                    None => Err(RuntimeError::EmptyTile(debug, self.clone())),
                 }
             }
             Instruction::CopyTo(addr) => match held {
@@ -575,7 +582,7 @@ impl Executable for Instruction {
                     state.floor[addr] = Some(val);
                     Ok(false)
                 }
-                None => Err(RuntimeError::EmptyHandsError(debug, self.clone())),
+                None => Err(RuntimeError::EmptyHands(debug, self.clone())),
             },
             Instruction::Inbox => match state.inbox.pop_front() {
                 Some(val) => {
@@ -592,13 +599,13 @@ impl Executable for Instruction {
                     state.held = None;
                     Ok(false)
                 }
-                None => Err(RuntimeError::EmptyHandsError(debug, self.clone())),
+                None => Err(RuntimeError::EmptyHands(debug, self.clone())),
             },
-            Instruction::LabelDef(_) => Ok(false),
-            Instruction::Jump(_) => Ok(false),
-            Instruction::JumpN(_) => Ok(false),
-            Instruction::JumpZ(_) => Ok(false),
-            Instruction::Define(_) => Ok(false),
+            Instruction::LabelDef(_)
+            | Instruction::Jump(_)
+            | Instruction::JumpN(_)
+            | Instruction::JumpZ(_)
+            | Instruction::Define(_) => Ok(false),
         }
     }
 }
@@ -608,11 +615,14 @@ fn tokenize_hrm(read: &mut Read) -> Result<Vec<TokenDebug>, Box<Error>> {
     let mut lines = reader.lines().enumerate();
     {
         //Ensure program starts with the proper header
-        let header = "-- HUMAN RESOURCE MACHINE PROGRAM --";
-        let (_line_number, line) = lines.next().expect("File has 0 lines");
-        let line = line?;
-        if line != header {
-            eprintln!("File should start with \"{}\" got \"{}\"", header, line);
+        let expected_header = "-- HUMAN RESOURCE MACHINE PROGRAM --";
+        let (_line_number, first_line) = lines.next().expect("File has 0 lines");
+        let first_line = first_line?;
+        if first_line != expected_header {
+            eprintln!(
+                "File should start with \"{}\" got \"{}\"",
+                expected_header, first_line
+            );
             panic!("File is not human resource machine file");
         }
     }
@@ -635,21 +645,23 @@ fn tokenize_hrm(read: &mut Read) -> Result<Vec<TokenDebug>, Box<Error>> {
                 "SUB" => Token::Op(Op::Sub),
                 "ADD" => Token::Op(Op::Add),
                 "DEFINE" => {
-                    let token = tokens.next();
+                    let token_type = tokens.next();
                     let num = tokens.next().expect("Define has no number");
-                    let num = num
-                        .parse::<usize>()
-                        .expect("DEFINE must be followed by a number");
+                    let num: usize = num.parse()?;
                     let mut svg = String::new();
-                    while let Some((_line_number, line)) = lines.next() {
-                        let line = line?;
-                        if line.ends_with(";") {
-                            svg.push_str(&line[..line.len() - 1]); //exclude trailing semicolon
-                            break;
+                    {
+                        let mut svg_line: String;
+                        while {
+                            let (_line_number, line) = lines.next().unwrap();
+                            svg_line = line?;
+                            !svg_line.ends_with(';')
+                        } {
+                            svg.push_str(&svg_line[..]);
                         }
-                        svg.push_str(&line[..]);
+                        svg.push_str(&svg_line[..svg_line.len() - 1]); //exclude trailing semicolon
                     }
-                    match token {
+
+                    match token_type {
                         Some("COMMENT") => Token::Op(Op::Define(Define::Comment(num, svg))),
                         Some("LABEL") => Token::Op(Op::Define(Define::Label(num, svg))),
                         Some(other) => {
@@ -751,7 +763,7 @@ fn tokens_to_instructions(tokens: Vec<TokenDebug>) -> Vec<InstructionDebug> {
 }
 
 /// Return hashmap of token indicies associated with labels
-fn process_labels(instructions: Vec<Instruction>) -> HashMap<String, usize> {
+fn process_labels(instructions: &[Instruction]) -> HashMap<String, usize> {
     let mut label_map: HashMap<String, usize> = HashMap::new();
     for (instr_ptr, instruction) in instructions.iter().enumerate() {
         if let Instruction::LabelDef(name) = instruction {
@@ -762,14 +774,14 @@ fn process_labels(instructions: Vec<Instruction>) -> HashMap<String, usize> {
 }
 
 fn interpret(
-    instructions: &Vec<InstructionDebug>,
+    instructions: &[InstructionDebug],
     state: &mut OfficeState,
 ) -> Result<(), RuntimeError> {
     let jmp_map = process_labels(
-        instructions
+        &instructions
             .iter()
             .map(|instr_debug| instr_debug.0.clone())
-            .collect(),
+            .collect::<Vec<Instruction>>(),
     );
     let mut instr_ptr: usize = 0;
     while instr_ptr < instructions.len() {
@@ -885,10 +897,9 @@ mod tests {
     }
 
     #[quickcheck]
-    fn quickcheck_02_busy_mail_room_speed(inbox: VecDeque<OfficeTile>) -> bool {
+    fn quickcheck_02_busy_mail_room_speed(mut inbox: VecDeque<OfficeTile>) -> bool {
         //this human resource machine program assumes 12 or fewer inbox items
         let max_size = 12;
-        let mut inbox = inbox.clone();
         inbox.truncate(max_size);
         let mut file = test_file!("02-Busy-Mail-Room.speed.asm").unwrap();
         let mut office_state = OfficeState::new(inbox.clone(), create_floor!(len 0,));
@@ -899,15 +910,13 @@ mod tests {
     #[quickcheck]
     fn quickcheck_03_copy_floor(inbox: VecDeque<OfficeTile>) -> bool {
         let mut file = test_file!("03-Copy-Floor.size.speed.asm").unwrap();
-        let mut office_state =
-            OfficeState::new(inbox.clone(), create_floor!('U', 'J', 'X', 'G', 'B', 'E'));
+        let mut office_state = OfficeState::new(inbox, create_floor!('U', 'J', 'X', 'G', 'B', 'E'));
         run(&mut file, &mut office_state).unwrap();
         create_inbox!('B', 'U', 'G') == office_state.outbox
     }
 
     #[quickcheck]
-    fn quickcheck_04_scrambler_handler(inbox: VecDeque<OfficeTile>) -> bool {
-        let mut inbox = inbox.clone();
+    fn quickcheck_04_scrambler_handler(mut inbox: VecDeque<OfficeTile>) -> bool {
         inbox.truncate(inbox.len() / 2 * 2);
         let mut file = test_file!("04-Scrambler-Handler.size.speed.asm").unwrap();
         let tokens = tokenize_hrm(&mut file).unwrap();
@@ -917,10 +926,10 @@ mod tests {
         interpret(&instructions, &mut first_office_state).unwrap();
         let mut office_state = OfficeState::new(first_office_state.outbox.clone(), floor.clone());
         interpret(&instructions, &mut office_state).unwrap();
-        inbox == office_state.outbox && first_office_state.outbox == pairwise_reverse(inbox)
+        inbox == office_state.outbox && first_office_state.outbox == pairwise_reverse(&inbox)
     }
 
-    fn pairwise_reverse(inbox: VecDeque<OfficeTile>) -> VecDeque<OfficeTile> {
+    fn pairwise_reverse(inbox: &VecDeque<OfficeTile>) -> VecDeque<OfficeTile> {
         let mut outbox = VecDeque::new();
         let mut iter = inbox.iter().peekable();
         while iter.peek().is_some() {
@@ -937,14 +946,13 @@ mod tests {
     }
 
     #[quickcheck]
-    fn quickcheck_06_rainy_summer(inbox: VecDeque<OfficeTile>) -> bool {
-        let mut inbox = inbox.clone();
+    fn quickcheck_06_rainy_summer(mut inbox: VecDeque<OfficeTile>) -> bool {
         inbox.truncate(inbox.len() / 2 * 2);
         let mut file = test_file!("06-Rainy-Summer.size.speed.asm").unwrap();
         let floor = create_floor!(len 3,);
         let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
         let res = run(&mut file, &mut office_state);
-        let expected = pairwise_sum(inbox);
+        let expected = pairwise_sum(&inbox);
         match (res, expected) {
             (Err(boxed_err), Err(arith_err)) => match boxed_err.downcast::<RuntimeError>() {
                 Ok(err) => ArithmeticError::try_from(*err).unwrap() == arith_err,
@@ -955,7 +963,7 @@ mod tests {
         }
     }
 
-    fn pairwise_sum(inbox: VecDeque<OfficeTile>) -> Result<VecDeque<OfficeTile>, ArithmeticError> {
+    fn pairwise_sum(inbox: &VecDeque<OfficeTile>) -> Result<VecDeque<OfficeTile>, ArithmeticError> {
         let mut outbox = VecDeque::new();
         let mut iter = inbox.iter().peekable();
         while iter.peek().is_some() {
@@ -982,14 +990,14 @@ mod tests {
         let first_office_state = office_state.clone();
         interpret(&instructions, &mut office_state).unwrap();
         first_office_state.outbox == office_state.outbox
-            && eliminate_zeroes(inbox) == first_office_state.outbox
+            && eliminate_zeroes(&inbox) == first_office_state.outbox
     }
 
-    fn eliminate_zeroes(inbox: VecDeque<OfficeTile>) -> VecDeque<OfficeTile> {
-        let mut res = VecDeque::new();
+    fn eliminate_zeroes(inbox: &VecDeque<OfficeTile>) -> VecDeque<OfficeTile> {
+        let mut res: VecDeque<OfficeTile> = VecDeque::new();
         for tile in inbox {
-            if tile != tile!(0) {
-                res.push_back(tile)
+            if *tile != tile!(0) {
+                res.push_back(*tile)
             }
         }
         res
@@ -1001,7 +1009,7 @@ mod tests {
         let floor = create_floor!(len 3,);
         let mut office_state = OfficeState::new(inbox.clone(), floor);
         let res = run(&mut file, &mut office_state);
-        let expected = triple(inbox);
+        let expected = triple(&inbox);
         match (res, expected) {
             (Ok(_), Ok(expected_out)) => office_state.outbox == expected_out,
             (Err(boxed_err), Err(arith_err)) => match boxed_err.downcast::<RuntimeError>() {
@@ -1012,11 +1020,11 @@ mod tests {
         }
     }
 
-    fn triple(inbox: VecDeque<OfficeTile>) -> Result<VecDeque<OfficeTile>, ArithmeticError> {
+    fn triple(inbox: &VecDeque<OfficeTile>) -> Result<VecDeque<OfficeTile>, ArithmeticError> {
         let mut res = VecDeque::new();
         for tile in inbox {
-            let double = tile.checked_add(tile)?;
-            let triple = double.checked_add(tile)?;
+            let double = tile.checked_add(*tile)?;
+            let triple = double.checked_add(*tile)?;
             res.push_back(triple)
         }
         Ok(res)
@@ -1033,7 +1041,7 @@ mod tests {
             let inbox = create_inbox!();
             let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
             interpret(&instructions, &mut office_state)?;
-            let expected = triple(inbox)?;
+            let expected = triple(&inbox)?;
             assert_eq!(office_state.outbox, expected);
         };
         {
@@ -1045,10 +1053,10 @@ mod tests {
         };
         {
             //test many
-            let inbox: VecDeque<OfficeTile> = (0..100).map(|e| OfficeTile::from(e)).collect();
+            let inbox: VecDeque<OfficeTile> = (0..100).map(OfficeTile::from).collect();
             let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
             interpret(&instructions, &mut office_state)?;
-            let expected = triple(inbox)?;
+            let expected = triple(&inbox)?;
             assert_eq!(office_state.outbox, expected);
         };
         {
@@ -1088,10 +1096,7 @@ mod tests {
         interpret(&instructions, &mut office_state).unwrap();
         let first_outbox = office_state.outbox.clone();
         interpret(&instructions, &mut office_state).unwrap();
-        first_outbox == office_state.outbox
-            && first_outbox
-                .iter()
-                .fold(true, |acc, e| acc && (*e == tile!(0)))
+        first_outbox == office_state.outbox && first_outbox.iter().all(|e| *e == tile!(0))
     }
 
     #[quickcheck]
@@ -1100,7 +1105,7 @@ mod tests {
         let floor = create_floor!(len 5,);
         let mut office_state = OfficeState::new(inbox.clone(), floor);
         let res = run(&mut file, &mut office_state);
-        let expected = octoply(inbox);
+        let expected = octoply(&inbox);
         match (res, expected) {
             (Ok(_), Ok(expected_out)) => office_state.outbox == expected_out,
             (Err(boxed_err), Err(arith_err)) => match boxed_err.downcast::<RuntimeError>() {
@@ -1111,10 +1116,10 @@ mod tests {
         }
     }
 
-    fn octoply(inbox: VecDeque<OfficeTile>) -> Result<VecDeque<OfficeTile>, ArithmeticError> {
+    fn octoply(inbox: &VecDeque<OfficeTile>) -> Result<VecDeque<OfficeTile>, ArithmeticError> {
         let mut res = VecDeque::new();
         for tile in inbox {
-            let x2 = tile.checked_add(tile)?;
+            let x2 = tile.checked_add(*tile)?;
             let x4 = x2.checked_add(x2)?;
             let x8 = x4.checked_add(x4)?;
             res.push_back(x8);
@@ -1133,7 +1138,7 @@ mod tests {
             let inbox = create_inbox!();
             let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
             interpret(&instructions, &mut office_state)?;
-            let expected = octoply(inbox)?;
+            let expected = octoply(&inbox)?;
             assert_eq!(office_state.outbox, expected);
         };
         {
@@ -1145,10 +1150,10 @@ mod tests {
         };
         {
             //test many
-            let inbox: VecDeque<OfficeTile> = (0..100).map(|e| OfficeTile::from(e)).collect();
+            let inbox: VecDeque<OfficeTile> = (0..100).map(OfficeTile::from).collect();
             let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
             interpret(&instructions, &mut office_state)?;
-            let expected = octoply(inbox)?;
+            let expected = octoply(&inbox)?;
             assert_eq!(office_state.outbox, expected);
         };
         {
