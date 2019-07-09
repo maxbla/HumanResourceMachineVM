@@ -628,8 +628,11 @@ fn tokenize_hrm(read: &mut dyn Read) -> Result<Vec<TokenDebug>, Box<dyn Error>> 
     }
 
     let mut tokens_vec: Vec<TokenDebug> = Vec::new();
-    while let Some((line_number, line)) = lines.next() {
+    'outer: while let Some((line_number, line)) = lines.next() {
         let line = line?;
+        if line.starts_with("--") && line.ends_with("--"){
+            continue;
+        }
         let mut tokens = line.split_whitespace();
         while let Some(token) = tokens.next() {
             let new_token: Token = match token {
@@ -644,6 +647,7 @@ fn tokenize_hrm(read: &mut dyn Read) -> Result<Vec<TokenDebug>, Box<dyn Error>> 
                 "BUMPDN" => Token::Op(Op::BumpDown),
                 "SUB" => Token::Op(Op::Sub),
                 "ADD" => Token::Op(Op::Add),
+                "COMMENT" => continue 'outer, //TODO: keep track of comments
                 "DEFINE" => {
                     let token_type = tokens.next();
                     let num = tokens.next().expect("Define has no number");
