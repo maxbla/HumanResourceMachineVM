@@ -9,10 +9,11 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Read;
 
-
 use std::convert::From;
 use std::convert::TryFrom;
 use std::fmt;
+use std::cmp::min;
+use std::string::ToString;
 
 #[cfg(test)]
 extern crate quickcheck;
@@ -346,54 +347,33 @@ impl OfficeState {
 
 impl fmt::Display for OfficeState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let Self {
-            inbox,
-            outbox,
-            floor,
-            held,
-        } = self;
-        writeln!(
-            f,
-            "held: [{}] ",
-            held.map_or(" ".to_string(), |held| held.to_string())
-        )?;
-        let v = vec![
-            self.floor.len() / 5 + 1,
-            if self.inbox.len() > 7 {
-                7
-            } else {
-                self.inbox.len()
-            },
-            if self.outbox.len() > 7 {
-                7
-            } else {
-                self.outbox.len()
-            },
-        ];
-        let rows: usize = *v.iter().max().unwrap_or(&0);
+        let Self { inbox, outbox, floor, held } = self;
+        let max_rows = 7;
+        let num_rows: usize = *vec![
+            floor.len() / 5,
+            min(inbox.len(), max_rows),
+            min(outbox.len(), max_rows),
+        ].iter().max().unwrap();
 
-        // Don't change this value unless you change the 11 in the format string
-        let floor_width = 5;
-        let floor_string_width = 2 * floor_width + 1;
-        let mut s: String = String::new();
-        for _ in 0..floor_string_width {
-            s.push(' ')
-        }
-        writeln!(f, "in {} out", s)?;
-        for row in 0..rows {
-            let inbox_val = inbox.get(row).map_or("".to_string(), ToString::to_string);
-            let outbox_val = outbox.get(row).map_or("".to_string(), ToString::to_string);
-            let mut s = String::with_capacity(2 * floor_width + 1);
-            s.push(' ');
+        let floor_width = 5; // number of floor items per row
+        let floor_string_width = 4 * floor_width + 1;
+        let held_string = format!("held: [{}] ",
+            held.map(|h| h.to_string()).unwrap_or_default());
+        writeln!(f, "in |{:^21}|out", held_string)?;
+        writeln!(f, "---+{:^21}+---", "-".repeat(21))?;
+        for row in 0..num_rows {
+            let mut s = String::with_capacity(floor_string_width);
             for index in row * floor_width..(row + 1) * floor_width {
-                let default = " ".to_string();
-                let floor_val = floor.get(index).map_or(default.clone(), |val| {
-                    val.map_or(default, |val| val.to_string())
-                });
-                s.push_str(&floor_val[..]);
-                s.push(' ');
+                let floor_val = floor
+                    .get(index)
+                    .map(|val| val.map(|val| val.to_string()))
+                    .unwrap_or_default()
+                    .unwrap_or_default();
+                s.push_str(&format!("{:^4}", floor_val));
             }
-            writeln!(f, "{:^3} {:^11} {:^3}", inbox_val, s, outbox_val)?
+            let inbox_val = inbox.get(row).map(ToString::to_string).unwrap_or_default();
+            let outbox_val = outbox.get(row).map(ToString::to_string).unwrap_or_default();
+            writeln!(f, "{:<3}|{:^21}|{:>3}", inbox_val, s, outbox_val)?
         }
         Ok(())
     }
