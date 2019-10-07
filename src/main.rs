@@ -564,8 +564,6 @@ impl Executable for Instruction {
             },
             Instruction::Inbox => match state.inbox.pop_front() {
                 Some(val) => {
-                    println!("Fetching {:?} from inbox", val);
-                    println!("Inbox:{:?}", state.inbox);
                     state.held = Some(val);
                     Ok(false)
                 }
