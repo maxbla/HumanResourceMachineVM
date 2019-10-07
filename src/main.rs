@@ -1,5 +1,3 @@
-#![deny(warnings)]
-#![deny(clippy::all)]
 use std::error::Error;
 use std::fs::File;
 
@@ -1170,7 +1168,7 @@ mod tests {
 
     #[quickcheck]
     fn quickcheck_31_string_reverse(mut inbox: VecDeque<OfficeTile>) -> TestResult {
-        if inbox.iter().find(|&e| *e == tile!(0)).is_some() || inbox.len() < 2 {
+        if inbox.iter().any(|&e| e == tile!(0)) || inbox.len() < 2 {
             return TestResult::discard()
         }
         inbox.truncate(11);
