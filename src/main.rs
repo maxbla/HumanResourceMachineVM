@@ -7,10 +7,10 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Read;
 
+use std::cmp::min;
 use std::convert::From;
 use std::convert::TryFrom;
 use std::fmt;
-use std::cmp::min;
 use std::string::ToString;
 
 #[cfg(test)]
@@ -337,18 +337,28 @@ impl OfficeState {
 
 impl fmt::Display for OfficeState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let Self { inbox, outbox, floor, held } = self;
+        let Self {
+            inbox,
+            outbox,
+            floor,
+            held,
+        } = self;
         let max_rows = 7;
         let num_rows: usize = *vec![
             floor.len() / 5,
             min(inbox.len(), max_rows),
             min(outbox.len(), max_rows),
-        ].iter().max().unwrap();
+        ]
+        .iter()
+        .max()
+        .unwrap();
 
         let floor_width = 5; // number of floor items per row
         let floor_string_width = 4 * floor_width + 1;
-        let held_string = format!("held: [{}] ",
-            held.map(|h| h.to_string()).unwrap_or_default());
+        let held_string = format!(
+            "held: [{}] ",
+            held.map(|h| h.to_string()).unwrap_or_default()
+        );
         writeln!(f, "in |{:^21}|out", held_string)?;
         writeln!(f, "---+{:^21}+---", "-".repeat(21))?;
         for row in 0..num_rows {
@@ -370,29 +380,39 @@ impl fmt::Display for OfficeState {
 }
 
 trait Addressable {
-    fn get_value(&self, state: &OfficeState, info: &DebugInfo, instr: &Instruction ) -> Result<usize, RuntimeError>;
+    fn get_value(
+        &self,
+        state: &OfficeState,
+        info: &DebugInfo,
+        instr: &Instruction,
+    ) -> Result<usize, RuntimeError>;
 }
 
 impl Addressable for Address {
-    fn get_value(&self, state: &OfficeState, info: &DebugInfo, instr: &Instruction) -> Result<usize, RuntimeError> {
+    fn get_value(
+        &self,
+        state: &OfficeState,
+        info: &DebugInfo,
+        instr: &Instruction,
+    ) -> Result<usize, RuntimeError> {
         match self {
             Address::AddressOf(addr) => {
                 let points_to = match state.floor.get(*addr) {
                     None => return Err(RuntimeError::Address(info.clone(), instr.clone())),
-                    Some(val) => val
+                    Some(val) => val,
                 };
                 let points_to = match points_to {
                     None => return Err(RuntimeError::EmptyTile(info.clone(), instr.clone())),
-                    Some(val) => *val
+                    Some(val) => *val,
                 };
                 match points_to {
-                    OfficeTile::Number(num) => {
-                        match usize::try_from(num) {
-                            Ok(num) => Ok(num),
-                            Err(_) => Err(RuntimeError::Overflow(info.clone(), instr.clone()))
-                        }
+                    OfficeTile::Number(num) => match usize::try_from(num) {
+                        Ok(num) => Ok(num),
+                        Err(_) => Err(RuntimeError::Overflow(info.clone(), instr.clone())),
+                    },
+                    OfficeTile::Character(_) => {
+                        Err(RuntimeError::TypeError(info.clone(), instr.clone()))
                     }
-                    OfficeTile::Character(_) => Err(RuntimeError::TypeError(info.clone(), instr.clone()))
                 }
             }
             Address::Address(addr) => Ok(*addr),
@@ -609,7 +629,7 @@ fn tokenize_hrm(read: &mut dyn Read) -> Result<Vec<TokenDebug>, Box<dyn Error>> 
     let mut tokens_vec: Vec<TokenDebug> = Vec::new();
     'outer: while let Some((line_number, line)) = lines.next() {
         let line = line?;
-        if line.starts_with("--") && line.ends_with("--"){
+        if line.starts_with("--") && line.ends_with("--") {
             continue;
         }
         let mut tokens = line.split_whitespace();
@@ -658,12 +678,12 @@ fn tokenize_hrm(read: &mut dyn Read) -> Result<Vec<TokenDebug>, Box<dyn Error>> 
                     }
                 }
                 label if label.ends_with(':') => {
-                    if label.len() == 1 {
-                        //invalid - the empty label is not a label
+                    let mut label = label.to_string();
+                    label.pop(); // remove trailing :
+                    if label.is_empty() {
                         panic!("invalid label at line {}", line_number);
                     }
-                    let label_name = label[0..label.len() - 1].to_string();
-                    Token::Op(Op::LabelDef(label_name))
+                    Token::Op(Op::LabelDef(label))
                 }
                 address if address.starts_with('[') && address.ends_with(']') => {
                     let address = address.split(|c| c == '[' || c == ']').nth(1).unwrap();
@@ -710,10 +730,10 @@ fn tokens_to_instructions(tokens: Vec<TokenDebug>) -> Vec<InstructionDebug> {
                             Op::BumpDown => Instruction::BumpDown(*addr),
                             Op::Add => Instruction::Add(*addr),
                             Op::Sub => Instruction::Sub(*addr),
-                            _ => panic!("Interpreter error, case not covered"),
+                            _ => unreachable!("Interpreter error, case not covered"),
                         }
                     } else {
-                        panic!(format!("Expected address, found {:?}", next))
+                        panic!("Expected address, found {:?}", next)
                     }
                 }
                 Op::Jump | Op::JumpN | Op::JumpZ => {
@@ -726,7 +746,7 @@ fn tokens_to_instructions(tokens: Vec<TokenDebug>) -> Vec<InstructionDebug> {
                             Op::JumpZ => Instruction::JumpZ(label.clone()),
                             _ => panic!("Interpreter error, case not covered"),
                         },
-                        _ => panic!(format!("Expected address, found {:?}", next)),
+                        _ => panic!("Expected address, found {:?}", next),
                     }
                 }
                 Op::LabelDef(label) => Instruction::LabelDef(label),
@@ -1170,7 +1190,7 @@ mod tests {
     #[quickcheck]
     fn quickcheck_31_string_reverse(mut inbox: VecDeque<OfficeTile>) -> TestResult {
         if inbox.iter().any(|&e| e == tile!(0)) || inbox.len() < 2 {
-            return TestResult::discard()
+            return TestResult::discard();
         }
         inbox.truncate(11);
         let orig_inbox = inbox.clone();
@@ -1182,12 +1202,12 @@ mod tests {
         let tokens = tokenize_hrm(&mut file).unwrap();
         let instructions = tokens_to_instructions(tokens);
         if interpret(&instructions, &mut office_state).is_err() {
-            return TestResult::failed()
+            return TestResult::failed();
         }
         office_state.outbox.push_back(tile!(0));
         let mut office_state = OfficeState::new(office_state.outbox, office_state.floor);
         if interpret(&instructions, &mut office_state).is_err() {
-            return TestResult::failed()
+            return TestResult::failed();
         }
         TestResult::from_bool(office_state.outbox == orig_inbox)
     }
