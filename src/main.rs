@@ -370,26 +370,32 @@ impl fmt::Display for OfficeState {
 }
 
 trait Addressable {
-    fn get_value(&self, state: &OfficeState) -> usize;
+    fn get_value(&self, state: &OfficeState, info: &DebugInfo, instr: &Instruction ) -> Result<usize, RuntimeError>;
 }
 
 impl Addressable for Address {
-    fn get_value(&self, state: &OfficeState) -> usize {
+    fn get_value(&self, state: &OfficeState, info: &DebugInfo, instr: &Instruction) -> Result<usize, RuntimeError> {
         match self {
             Address::AddressOf(addr) => {
-                let points_to = *state.floor.get(*addr).expect("Address out of range");
-                let points_to = points_to.expect("Value at address our of range");
+                let points_to = match state.floor.get(*addr) {
+                    None => return Err(RuntimeError::Address(info.clone(), instr.clone())),
+                    Some(val) => val
+                };
+                let points_to = match points_to {
+                    None => return Err(RuntimeError::EmptyTile(info.clone(), instr.clone())),
+                    Some(val) => *val
+                };
                 match points_to {
                     OfficeTile::Number(num) => {
-                        if num < 0 {
-                            panic!("Cannot jump to negative address")
+                        match usize::try_from(num) {
+                            Ok(num) => Ok(num),
+                            Err(_) => Err(RuntimeError::Overflow(info.clone(), instr.clone()))
                         }
-                        usize::try_from(num).unwrap()
                     }
-                    OfficeTile::Character(_) => panic!("Character cannot be used as address"),
+                    OfficeTile::Character(_) => Err(RuntimeError::TypeError(info.clone(), instr.clone()))
                 }
             }
-            Address::Address(addr) => *addr,
+            Address::Address(addr) => Ok(*addr),
         }
     }
 }
@@ -400,6 +406,7 @@ enum RuntimeError {
     EmptyTile(DebugInfo, Instruction),
     Overflow(DebugInfo, Instruction),
     TypeError(DebugInfo, Instruction),
+    Address(DebugInfo, Instruction),
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -425,6 +432,10 @@ impl fmt::Display for RuntimeError {
             }
             RuntimeError::TypeError(info, instr) => {
                 writeln!(f, "can't {} - Incompatible types", instr)?;
+                writeln!(f, "line: {}", info.line)
+            }
+            RuntimeError::Address(info, instr) => {
+                writeln!(f, "can't {} - Address out of range", instr)?;
                 writeln!(f, "line: {}", info.line)
             }
         }
@@ -481,7 +492,7 @@ impl Executable for Instruction {
         let debug = debug.clone();
         match self {
             Instruction::Add(addr) => {
-                let addr = addr.get_value(state);
+                let addr = addr.get_value(state, &debug, &self)?;
                 match floor[addr] {
                     None => Err(RuntimeError::EmptyTile(debug, self.clone())),
                     Some(val) => match held {
@@ -496,7 +507,7 @@ impl Executable for Instruction {
                 }
             }
             Instruction::Sub(addr) => {
-                let addr = addr.get_value(state);
+                let addr = addr.get_value(state, &debug, &self)?;
                 match floor[addr] {
                     None => Err(RuntimeError::EmptyTile(debug, self.clone())),
                     Some(val) => match held {
@@ -511,7 +522,7 @@ impl Executable for Instruction {
                 }
             }
             Instruction::BumpUp(addr) => {
-                let addr = addr.get_value(state);
+                let addr = addr.get_value(state, &debug, &self)?;
                 match floor[addr] {
                     Some(val) => {
                         let one = OfficeTile::Number(1);
@@ -524,7 +535,7 @@ impl Executable for Instruction {
                 }
             }
             Instruction::BumpDown(addr) => {
-                let addr = addr.get_value(state);
+                let addr = addr.get_value(state, &debug, &self)?;
                 match floor[addr] {
                     Some(val) => {
                         let one = OfficeTile::Number(1);
@@ -537,7 +548,7 @@ impl Executable for Instruction {
                 }
             }
             Instruction::CopyFrom(addr) => {
-                let addr = addr.get_value(state);
+                let addr = addr.get_value(state, &debug, &self)?;
                 match floor[addr] {
                     Some(val) => {
                         state.held = Some(val);
@@ -548,7 +559,7 @@ impl Executable for Instruction {
             }
             Instruction::CopyTo(addr) => match held {
                 Some(val) => {
-                    let addr = addr.get_value(state);
+                    let addr = addr.get_value(state, &debug, &self)?;
                     state.floor[addr] = Some(val);
                     Ok(false)
                 }
