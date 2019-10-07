@@ -175,7 +175,7 @@ impl TryFrom<i16> for OfficeTile {
     type Error = ArithmeticError;
 
     fn try_from(n: i16) -> Result<Self, Self::Error> {
-        if Self::get_range().contains(&n) {
+        if Self::RANGE.contains(&n) {
             Ok(OfficeTile::Number(n))
         } else {
             Err(ArithmeticError::Overflow)
@@ -249,16 +249,13 @@ impl Arbitrary for OfficeTile {
 }
 
 impl OfficeTile {
-    #[inline]
-    fn get_range() -> std::ops::Range<i16> {
-        (-999..1000)
-    }
+    const RANGE: std::ops::RangeInclusive<i16> = (-999..=999);
 
     fn checked_add(self, rhs: Self) -> Result<Self, ArithmeticError> {
         match (self, rhs) {
             (OfficeTile::Number(lhs), OfficeTile::Number(rhs)) => match lhs.checked_add(rhs) {
                 Some(sum) => {
-                    if Self::get_range().contains(&sum) {
+                    if Self::RANGE.contains(&sum) {
                         Ok(OfficeTile::Number(sum))
                     } else {
                         Err(ArithmeticError::Overflow)
@@ -269,7 +266,7 @@ impl OfficeTile {
             (OfficeTile::Character(lhs), OfficeTile::Character(rhs)) => {
                 match (lhs as i16).checked_add(rhs as i16) {
                     Some(sum) => {
-                        if Self::get_range().contains(&sum) {
+                        if Self::RANGE.contains(&sum) {
                             Ok(OfficeTile::Number(sum))
                         } else {
                             Err(ArithmeticError::Overflow)
@@ -287,7 +284,7 @@ impl OfficeTile {
         match (self, rhs) {
             (OfficeTile::Number(lhs), OfficeTile::Number(rhs)) => match lhs.checked_sub(rhs) {
                 Some(diff) => {
-                    if Self::get_range().contains(&diff) {
+                    if Self::RANGE.contains(&diff) {
                         Ok(OfficeTile::Number(diff))
                     } else {
                         Err(ArithmeticError::Overflow)
@@ -298,7 +295,7 @@ impl OfficeTile {
             (OfficeTile::Character(lhs), OfficeTile::Character(rhs)) => {
                 match (lhs as i16).checked_sub(rhs as i16) {
                     Some(diff) => {
-                        if Self::get_range().contains(&diff) {
+                        if Self::RANGE.contains(&diff) {
                             Ok(OfficeTile::Number(diff))
                         } else {
                             Err(ArithmeticError::Overflow)
