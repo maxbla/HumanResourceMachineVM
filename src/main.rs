@@ -836,14 +836,15 @@ mod tests {
         OfficeTile, RuntimeError,
     };
 
-
     use std::collections::VecDeque;
     use std::convert::TryFrom;
     use std::error::Error;
     use std::fs::File;
     use std::path::Path;
 
-    static SOLUTIONS_PATH: &'static str = "./human-resource-machine-solutions";
+    use quickcheck::TestResult;
+
+    static SOLUTIONS_PATH: &str = "./human-resource-machine-solutions";
 
     macro_rules! test_file {
         ( $filename:expr ) => {
@@ -1167,9 +1168,34 @@ mod tests {
         Ok(())
     }
 
+    #[quickcheck]
+    fn quickcheck_31_string_reverse(mut inbox: VecDeque<OfficeTile>) -> TestResult {
+        if inbox.iter().find(|&e| *e == tile!(0)).is_some() || inbox.len() < 2 {
+            return TestResult::discard()
+        }
+        inbox.truncate(11);
+        let orig_inbox = inbox.clone();
+        inbox.push_back(tile!(0));
+        let inbox = inbox; // shadow inbox to make it not mutable
+        let mut file = test_file!("31-String-Reverse.speed.asm").unwrap();
+        let floor = create_floor!(len 15, 14, 0);
+        let mut office_state = OfficeState::new(inbox, floor);
+        let tokens = tokenize_hrm(&mut file).unwrap();
+        let instructions = tokens_to_instructions(tokens);
+        if interpret(&instructions, &mut office_state).is_err() {
+            return TestResult::failed()
+        }
+        office_state.outbox.push_back(tile!(0));
+        let mut office_state = OfficeState::new(office_state.outbox, office_state.floor);
+        if interpret(&instructions, &mut office_state).is_err() {
+            return TestResult::failed()
+        }
+        TestResult::from_bool(office_state.outbox == orig_inbox)
+    }
+
     #[test]
     fn test_reverse_string() -> Result<(), Box<dyn Error>> {
-        let mut file = File::open("example.hrm").unwrap();
+        let mut file = test_file!("31-String-Reverse.speed.asm").unwrap();
         let inbox = create_inbox!(
             'b', 'r', 'a', 'i', 'n', 0, 'x', 'y', 0, 'a', 'b', 's', 'e', 'n', 't', 'm', 'i', 'n',
             'd', 'e', 'd', 0
