@@ -172,7 +172,6 @@ impl From<i8> for OfficeTile {
 }
 
 impl TryFrom<i16> for OfficeTile {
-
     type Error = ArithmeticError;
 
     fn try_from(n: i16) -> Result<Self, Self::Error> {
@@ -181,13 +180,6 @@ impl TryFrom<i16> for OfficeTile {
         } else {
             Err(ArithmeticError::Overflow)
         }
-
-    }
-}
-
-impl From<&OfficeTile> for OfficeTile {
-    fn from(tile: &Self) -> Self {
-        *tile
     }
 }
 
