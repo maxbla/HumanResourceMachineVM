@@ -1,6 +1,6 @@
 [package]
 name = "human_resource_machine"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Max Blachman <blachmanmax@gmail.com>"]
 edition = "2018"
 

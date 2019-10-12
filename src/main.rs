@@ -153,7 +153,7 @@ struct DebugInfo {
 /// Can either be a character or a number (integer)
 /// `OfficeTile`s come in the inbox, are placed on the floor and go out the outbox
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum OfficeTile {
+pub enum OfficeTile {
     Number(i16),     //numbers in human resource machine are in -999..=999
     Character(char), //chars in human resource machine appear to be all [a-zA-Z]
 }
@@ -182,7 +182,8 @@ impl TryFrom<i16> for OfficeTile {
     }
 }
 
-macro_rules! create_inbox {
+#[macro_export]
+macro_rules! inbox {
     ( $( $x:expr ),* ) => {
         {
             #[allow(unused_mut)]
@@ -195,6 +196,7 @@ macro_rules! create_inbox {
     }
 }
 
+#[macro_export]
 macro_rules! outbox {
     ( $( $x:expr ),* ) => {
         {
@@ -208,6 +210,7 @@ macro_rules! outbox {
     }
 }
 
+#[macro_export]
 macro_rules! create_floor {
     ( $( $tile:expr ),* ) => {
         {
@@ -218,7 +221,7 @@ macro_rules! create_floor {
             floor
         }
     };
-    ( len $len:expr, $($index:expr, $tile:expr ),* ) => {
+    ( len $len:expr, $({$index:expr, $tile:expr }),* ) => {
         {
             let mut floor:Vec<Option<OfficeTile>> = Vec::with_capacity($len);
             for _ in 0..$len {
@@ -322,7 +325,7 @@ impl OfficeTile {
 /// The state of the entire office
 /// Composed of the tile held by the player, the inbox, outbox and floor
 #[derive(Debug, Clone)]
-struct OfficeState {
+pub struct OfficeState {
     held: Option<OfficeTile>,
     /// OfficeTiles that will be inboxed
     /// The highest index tile is the next one to be inboxed
@@ -446,7 +449,7 @@ enum RuntimeError {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-enum ArithmeticError {
+pub enum ArithmeticError {
     Overflow,
     TypeError,
 }
@@ -857,7 +860,7 @@ fn calc_jump(
     None
 }
 
-fn run(read: &mut dyn Read, state: &mut OfficeState) -> Result<(), Box<dyn Error>> {
+pub fn run(read: &mut dyn Read, state: &mut OfficeState) -> Result<(), Box<dyn Error>> {
     let tokens = tokenize_hrm(read)?;
     let instructions = tokens_to_instructions(tokens);
     interpret(&instructions, state)?;
@@ -895,8 +898,8 @@ mod tests {
     #[test]
     fn test_01_mail_room() -> Result<(), Box<dyn Error>> {
         let mut file = test_file!("01-Mail-Room.size.speed.asm")?;
-        let inbox = create_inbox!(7, 1, 3);
-        let expected_out = create_inbox!(7, 1, 3);
+        let inbox = inbox!(7, 1, 3);
+        let expected_out = inbox!(7, 1, 3);
         let floor = create_floor!(len 0,);
         let mut office_state = OfficeState::new(inbox, floor);
         run(&mut file, &mut office_state)?;
@@ -907,7 +910,7 @@ mod tests {
     #[quickcheck]
     fn quickcheck_01_mail_room(inbox0: OfficeTile, inbox1: OfficeTile, inbox2: OfficeTile) -> bool {
         let mut file = test_file!("01-Mail-Room.size.speed.asm").unwrap();
-        let initial_inbox = create_inbox!(inbox0, inbox1, inbox2);
+        let initial_inbox = inbox!(inbox0, inbox1, inbox2);
         let mut office_state = OfficeState::new(initial_inbox.clone(), create_floor!(len 0,));
         run(&mut file, &mut office_state).unwrap();
         box_eq(&initial_inbox, &office_state.outbox)
@@ -937,7 +940,7 @@ mod tests {
         let mut file = test_file!("03-Copy-Floor.size.speed.asm").unwrap();
         let mut office_state = OfficeState::new(inbox, create_floor!('U', 'J', 'X', 'G', 'B', 'E'));
         run(&mut file, &mut office_state).unwrap();
-        box_eq(&create_inbox!('B', 'U', 'G'), &office_state.outbox)
+        box_eq(&inbox!('B', 'U', 'G'), &office_state.outbox)
     }
 
     #[quickcheck]
@@ -1064,7 +1067,7 @@ mod tests {
         let floor = create_floor!(len 3,);
         {
             //test zero
-            let inbox = create_inbox!();
+            let inbox = inbox!();
             let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
             interpret(&instructions, &mut office_state)?;
             let expected = triple(&inbox)?;
@@ -1072,10 +1075,10 @@ mod tests {
         };
         {
             //test one
-            let inbox = create_inbox!(1);
+            let inbox = inbox!(1);
             let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
             interpret(&instructions, &mut office_state)?;
-            assert!(box_eq(&office_state.outbox, &create_inbox!(3)));
+            assert!(box_eq(&office_state.outbox, &inbox!(3)));
         };
         {
             //test many
@@ -1161,7 +1164,7 @@ mod tests {
         let floor = create_floor!(len 3,);
         {
             //test zero
-            let inbox = create_inbox!();
+            let inbox = inbox!();
             let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
             interpret(&instructions, &mut office_state)?;
             let expected = octoply(&inbox)?;
@@ -1169,10 +1172,10 @@ mod tests {
         };
         {
             //test one
-            let inbox = create_inbox!(1);
+            let inbox = inbox!(1);
             let mut office_state = OfficeState::new(inbox.clone(), floor.clone());
             interpret(&instructions, &mut office_state)?;
-            assert!(box_eq(&office_state.outbox, &create_inbox!(8)));
+            assert!(box_eq(&office_state.outbox, &inbox!(8)));
         };
         {
             //test many
@@ -1219,7 +1222,7 @@ mod tests {
         inbox.insert(0, tile!(0));
         let inbox = inbox; // shadow inbox to make it not mutable
         let mut file = test_file!("31-String-Reverse.speed.asm").unwrap();
-        let floor = create_floor!(len 15, 14, 0);
+        let floor = create_floor!(len 15, {14, 0});
         let mut office_state = OfficeState::new(inbox, floor.clone());
         let tokens = tokenize_hrm(&mut file).unwrap();
         let instructions = tokens_to_instructions(tokens);
@@ -1237,11 +1240,11 @@ mod tests {
     #[test]
     fn test_reverse_string() -> Result<(), Box<dyn Error>> {
         let mut file = test_file!("31-String-Reverse.speed.asm").unwrap();
-        let inbox = create_inbox!(
+        let inbox = inbox!(
             'b', 'r', 'a', 'i', 'n', 0, 'x', 'y', 0, 'a', 'b', 's', 'e', 'n', 't', 'm', 'i', 'n',
             'd', 'e', 'd', 0
         );
-        let floor = create_floor!(len 15, 14, tile!(0));
+        let floor = create_floor!(len 15, {14, 0});
         let mut office_state = OfficeState::new(inbox, floor);
         run(&mut file, &mut office_state)?;
 
@@ -1259,11 +1262,10 @@ mod tests {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut file = File::open("example.hrm")?;
-    let inbox = create_inbox!('b', 'r', 'a', 'i', 'n', 0);
-    let floor = create_floor!(len 15, 14, tile!(0));
-
+    let inbox = inbox!('b', 'r', 'a', 'i', 'n', 0);
+    let floor = create_floor!(len 15, {14, 0});
     let mut office_state = OfficeState::new(inbox, floor);
+    let mut file = File::open("example.hrm")?;
     run(&mut file, &mut office_state)?;
     Ok(())
 }
