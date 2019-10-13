@@ -264,12 +264,14 @@ impl OfficeTile {
 
     fn checked_add(self, rhs: Self) -> Result<Self, ArithmeticError> {
         match (self, rhs) {
-            (OfficeTile::Number(lhs), OfficeTile::Number(rhs)) =>{
+            (OfficeTile::Number(lhs), OfficeTile::Number(rhs)) => {
                 let sum = lhs.checked_add(rhs).ok_or(ArithmeticError::Overflow)?;
                 OfficeTile::try_from(sum)
-            },
+            }
             (OfficeTile::Character(lhs), OfficeTile::Character(rhs)) => {
-                let sum = (lhs as i16).checked_add(rhs as i16).ok_or(ArithmeticError::Overflow)?;
+                let sum = (lhs as i16)
+                    .checked_add(rhs as i16)
+                    .ok_or(ArithmeticError::Overflow)?;
                 OfficeTile::try_from(sum)
             }
             (OfficeTile::Number(_), OfficeTile::Character(_))
@@ -282,9 +284,11 @@ impl OfficeTile {
             (OfficeTile::Number(lhs), OfficeTile::Number(rhs)) => {
                 let diff = lhs.checked_sub(rhs).ok_or(ArithmeticError::Overflow)?;
                 OfficeTile::try_from(diff)
-            },
+            }
             (OfficeTile::Character(lhs), OfficeTile::Character(rhs)) => {
-                let diff = (lhs as i16).checked_sub(rhs as i16).ok_or(ArithmeticError::Overflow)?;
+                let diff = (lhs as i16)
+                    .checked_sub(rhs as i16)
+                    .ok_or(ArithmeticError::Overflow)?;
                 OfficeTile::try_from(diff)
             }
             (OfficeTile::Number(_), OfficeTile::Character(_))
@@ -357,11 +361,13 @@ impl fmt::Display for OfficeState {
             }
             let in_idx = inbox.len().checked_sub(row + 1);
             // TODO: use Option::flatten() once it lands in stable
-            let inbox_val = in_idx.map(|i| inbox.get(i).map(ToString::to_string))
+            let inbox_val = in_idx
+                .map(|i| inbox.get(i).map(ToString::to_string))
                 .unwrap_or_default()
                 .unwrap_or_default();
             let out_idx = outbox.len().checked_sub(row + 1);
-            let outbox_val = out_idx.map(|i| outbox.get(i).map(ToString::to_string))
+            let outbox_val = out_idx
+                .map(|i| outbox.get(i).map(ToString::to_string))
                 .unwrap_or_default()
                 .unwrap_or_default();
             writeln!(f, "{:<3}|{:^21}|{:>3}", inbox_val, s, outbox_val)?
@@ -388,12 +394,15 @@ impl Addressable for Address {
     ) -> Result<usize, RuntimeError> {
         match self {
             Address::AddressOf(addr) => {
-                let addr = state.floor.get(*addr).ok_or_else(|| RuntimeError::Address(info.clone(), instr.clone()))?;
-                let points_to = addr.ok_or_else(|| RuntimeError::EmptyTile(info.clone(), instr.clone()))?;
+                let addr = state
+                    .floor
+                    .get(*addr)
+                    .ok_or_else(|| RuntimeError::Address(info.clone(), instr.clone()))?;
+                let points_to =
+                    addr.ok_or_else(|| RuntimeError::EmptyTile(info.clone(), instr.clone()))?;
                 match points_to {
-                    OfficeTile::Number(num) => {
-                        usize::try_from(num).map_err(|_| RuntimeError::Overflow(info.clone(), instr.clone()))
-                    },
+                    OfficeTile::Number(num) => usize::try_from(num)
+                        .map_err(|_| RuntimeError::Overflow(info.clone(), instr.clone())),
                     OfficeTile::Character(_) => {
                         Err(RuntimeError::TypeError(info.clone(), instr.clone()))
                     }
@@ -497,42 +506,50 @@ impl Executable for Instruction {
         match self {
             Instruction::Add(addr) => {
                 let addr = addr.get_value(state, &debug, &self)?;
-                let val = floor[addr].ok_or_else(|| RuntimeError::EmptyTile(debug.clone(), self.clone()))?;
-                let held = held.ok_or_else(|| RuntimeError::EmptyHands(debug.clone(), self.clone()))?;
+                let val = floor[addr]
+                    .ok_or_else(|| RuntimeError::EmptyTile(debug.clone(), self.clone()))?;
+                let held =
+                    held.ok_or_else(|| RuntimeError::EmptyHands(debug.clone(), self.clone()))?;
                 let res = arithmetic_to_runtime_error(held.checked_add(val), self, debug)?;
                 state.held = Some(res);
             }
             Instruction::Sub(addr) => {
                 let addr = addr.get_value(state, &debug, &self)?;
-                let val = floor[addr].ok_or_else(|| RuntimeError::EmptyTile(debug.clone(), self.clone()))?;
-                let held = held.ok_or_else(|| RuntimeError::EmptyHands(debug.clone(), self.clone()))?;
+                let val = floor[addr]
+                    .ok_or_else(|| RuntimeError::EmptyTile(debug.clone(), self.clone()))?;
+                let held =
+                    held.ok_or_else(|| RuntimeError::EmptyHands(debug.clone(), self.clone()))?;
                 let res = arithmetic_to_runtime_error(held.checked_sub(val), self, debug)?;
                 state.held = Some(res);
             }
             Instruction::BumpUp(addr) => {
                 let addr = addr.get_value(state, &debug, &self)?;
-                let val = floor[addr].ok_or_else(|| RuntimeError::EmptyTile(debug.clone(), self.clone()))?;
+                let val = floor[addr]
+                    .ok_or_else(|| RuntimeError::EmptyTile(debug.clone(), self.clone()))?;
                 let res = arithmetic_to_runtime_error(val.checked_add(1.into()), self, debug)?;
                 state.floor[addr] = Some(res);
                 state.held = Some(res);
             }
             Instruction::BumpDown(addr) => {
                 let addr = addr.get_value(state, &debug, &self)?;
-                let val = floor[addr].ok_or_else(|| RuntimeError::EmptyTile(debug.clone(), self.clone()))?;
+                let val = floor[addr]
+                    .ok_or_else(|| RuntimeError::EmptyTile(debug.clone(), self.clone()))?;
                 let res = arithmetic_to_runtime_error(val.checked_sub(1.into()), self, debug)?;
                 state.floor[addr] = Some(res);
                 state.held = Some(res);
             }
             Instruction::CopyFrom(addr) => {
                 let addr = addr.get_value(state, &debug, &self)?;
-                let val = floor[addr].ok_or_else(|| RuntimeError::EmptyTile(debug, self.clone()))?;
+                let val =
+                    floor[addr].ok_or_else(|| RuntimeError::EmptyTile(debug, self.clone()))?;
                 state.held = Some(val);
             }
             Instruction::CopyTo(addr) => {
-                let val = held.ok_or_else(|| RuntimeError::EmptyHands(debug.clone(), self.clone()))?;
+                let val =
+                    held.ok_or_else(|| RuntimeError::EmptyHands(debug.clone(), self.clone()))?;
                 let addr = addr.get_value(state, &debug, &self)?;
                 state.floor[addr] = Some(val);
-            },
+            }
             Instruction::Inbox => match state.inbox.pop() {
                 Some(val) => state.held = Some(val),
                 None => return Ok(true),
@@ -541,12 +558,12 @@ impl Executable for Instruction {
                 let val = held.ok_or_else(|| RuntimeError::EmptyHands(debug, self.clone()))?;
                 state.outbox.push(val);
                 state.held = None;
-            },
+            }
             Instruction::LabelDef(_)
             | Instruction::Jump(_)
             | Instruction::JumpN(_)
             | Instruction::JumpZ(_)
-            | Instruction::Define(_) => (),  // no op
+            | Instruction::Define(_) => (), // no op
         }
         Ok(false)
     }
@@ -801,8 +818,8 @@ mod tests {
     use std::convert::TryFrom;
     use std::error::Error;
     use std::fs::File;
-    use std::path::Path;
     use std::iter::Iterator;
+    use std::path::Path;
 
     use quickcheck::TestResult;
 
@@ -878,12 +895,16 @@ mod tests {
         interpret(&instructions, &mut first_office_state).unwrap();
         let mut office_state = OfficeState::new(first_office_state.outbox.clone(), floor.clone());
         interpret(&instructions, &mut office_state).unwrap();
-        &inbox == &office_state.outbox &&
-        box_eq(&first_office_state.outbox, &pairwise_reverse(&inbox))
+        &inbox == &office_state.outbox
+            && box_eq(&first_office_state.outbox, &pairwise_reverse(&inbox))
     }
 
     fn pairwise_reverse(inbox: &Vec<OfficeTile>) -> Vec<OfficeTile> {
-        inbox.chunks_exact(2).flat_map(|chunk| chunk.iter().rev()).copied().collect()
+        inbox
+            .chunks_exact(2)
+            .flat_map(|chunk| chunk.iter().rev())
+            .copied()
+            .collect()
     }
 
     #[quickcheck]
