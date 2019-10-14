@@ -197,7 +197,6 @@ macro_rules! inbox {
 }
 
 #[macro_export]
-#[allow(clippy::let_and_return)]
 macro_rules! outbox {
     ( $( $x:expr ),* ) => {
         {
