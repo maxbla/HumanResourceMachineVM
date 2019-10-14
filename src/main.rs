@@ -490,13 +490,10 @@ fn arithmetic_to_runtime_error(
     instr: &Instruction,
     debug: DebugInfo,
 ) -> Result<OfficeTile, RuntimeError> {
-    match val {
-        Ok(num) => Ok(num),
-        Err(err) => match err {
-            ArithmeticError::Overflow => Err(RuntimeError::Overflow(debug, instr.clone())),
-            ArithmeticError::TypeError => Err(RuntimeError::TypeError(debug, instr.clone())),
-        },
-    }
+    val.map_err(|err| match err {
+        ArithmeticError::Overflow => RuntimeError::Overflow(debug, instr.clone()),
+        ArithmeticError::TypeError => RuntimeError::TypeError(debug, instr.clone()),
+    })
 }
 
 impl Executable for Instruction {
